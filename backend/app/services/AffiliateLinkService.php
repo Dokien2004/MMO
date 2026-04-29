@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/JsonStorage.php';
+require_once __DIR__ . '/DatabaseStorage.php';
 require_once __DIR__ . '/ProductSyncService.php';
 require_once __DIR__ . '/TaskLogService.php';
 
 final class AffiliateLinkService
 {
-    private JsonStorage $storage;
+    private DatabaseStorage $storage;
     private ProductSyncService $productSyncService;
     private TaskLogService $taskLogService;
     private string $fileName = 'affiliate_links.json';
 
     public function __construct()
     {
-        $this->storage = new JsonStorage();
+        $this->storage = new DatabaseStorage();
         $this->productSyncService = new ProductSyncService();
         $this->taskLogService = new TaskLogService();
     }

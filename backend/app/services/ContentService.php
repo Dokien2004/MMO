@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/JsonStorage.php';
+require_once __DIR__ . '/DatabaseStorage.php';
 require_once __DIR__ . '/ProductSyncService.php';
 require_once __DIR__ . '/AffiliateLinkService.php';
 require_once __DIR__ . '/TaskLogService.php';
@@ -10,7 +10,7 @@ require_once __DIR__ . '/OpenAIContentProvider.php';
 
 final class ContentService
 {
-    private JsonStorage $storage;
+    private DatabaseStorage $storage;
     private ProductSyncService $productSyncService;
     private AffiliateLinkService $affiliateLinkService;
     private TaskLogService $taskLogService;
@@ -19,7 +19,7 @@ final class ContentService
 
     public function __construct()
     {
-        $this->storage = new JsonStorage();
+        $this->storage = new DatabaseStorage();
         $this->productSyncService = new ProductSyncService();
         $this->affiliateLinkService = new AffiliateLinkService();
         $this->taskLogService = new TaskLogService();

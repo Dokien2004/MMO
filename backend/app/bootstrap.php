@@ -6,7 +6,7 @@ session_start();
 
 require_once __DIR__ . '/config/config.php';
 require_once __DIR__ . '/helpers/view_helper.php';
-require_once __DIR__ . '/services/JsonStorage.php';
+require_once __DIR__ . '/services/DatabaseStorage.php';
 require_once __DIR__ . '/services/TaskLogService.php';
 require_once __DIR__ . '/services/ProductSyncService.php';
 require_once __DIR__ . '/services/AffiliateLinkService.php';

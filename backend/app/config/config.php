@@ -25,6 +25,28 @@ const FACEBOOK_PAGE_ACCESS_TOKEN = '';
 const FACEBOOK_GRAPH_VERSION = 'v23.0';
 const FACEBOOK_TIMEOUT_SECONDS = 45;
 
+$localConfig = __DIR__ . '/local.php';
+if (file_exists($localConfig)) {
+    require_once $localConfig;
+}
+
+if (!defined('DB_HOST')) {
+    define('DB_HOST', '127.0.0.1');
+}
+if (!defined('DB_PORT')) {
+    define('DB_PORT', 3306);
+}
+if (!defined('DB_DATABASE')) {
+    define('DB_DATABASE', 'mmo_affiliate');
+}
+if (!defined('DB_USERNAME')) {
+    define('DB_USERNAME', 'mmo_app');
+}
+if (!defined('DB_PASSWORD')) {
+    define('DB_PASSWORD', '');
+}
+
+
 if (!is_dir(DATA_PATH)) {
     mkdir(DATA_PATH, 0755, true);
 }
@@ -64,4 +86,26 @@ function facebook_page_access_token(): string
 {
     $fromEnv = app_env('FACEBOOK_PAGE_ACCESS_TOKEN', '');
     return $fromEnv !== '' ? $fromEnv : FACEBOOK_PAGE_ACCESS_TOKEN;
+}
+
+function db_pdo(): PDO
+{
+    static $pdo = null;
+    if ($pdo instanceof PDO) {
+        return $pdo;
+    }
+
+    $host = app_env('DB_HOST', DB_HOST);
+    $port = (int)app_env('DB_PORT', (string)DB_PORT);
+    $database = app_env('DB_DATABASE', DB_DATABASE);
+    $username = app_env('DB_USERNAME', DB_USERNAME);
+    $password = app_env('DB_PASSWORD', DB_PASSWORD);
+
+    $dsn = sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $host, $port, $database);
+    $pdo = new PDO($dsn, $username, $password, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ]);
+    return $pdo;
 }

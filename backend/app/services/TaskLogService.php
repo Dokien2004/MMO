@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/JsonStorage.php';
+require_once __DIR__ . '/DatabaseStorage.php';
 
 final class TaskLogService
 {
-    private JsonStorage $storage;
+    private DatabaseStorage $storage;
     private string $fileName = 'task_logs.json';
 
     public function __construct()
     {
-        $this->storage = new JsonStorage();
+        $this->storage = new DatabaseStorage();
     }
 
     public function create(string $taskName, string $status, array $payload = [], array $resultPayload = [], string $errorMessage = ''): array

@@ -63,3 +63,27 @@ Các API kiểm tra nhanh:
 ## Cron mẫu
 
 Xem `workers/cron.sample`. Chưa tự động cài crontab để tránh chạy job ngoài ý muốn.
+
+
+## Database thật
+
+Dự án hiện chạy bằng MariaDB/MySQL, không ghi dữ liệu runtime vào `storage/data/*.json` nữa.
+
+- Database: `mmo_affiliate`
+- User app: `mmo_app`
+- Credential local: `backend/app/config/local.php` (đã bị `.gitignore`, không push lên git)
+
+Import dữ liệu JSON cũ vào DB:
+
+```bash
+php scripts/migrate-json-to-db.php
+```
+
+Service production local:
+
+```bash
+systemctl status mariadb
+systemctl status mmo-app
+```
+
+`mmo-app` đã được cấu hình phụ thuộc `mariadb.service` để reboot xong DB chạy trước app.

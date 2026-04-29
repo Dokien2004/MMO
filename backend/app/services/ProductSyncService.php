@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/JsonStorage.php';
+require_once __DIR__ . '/DatabaseStorage.php';
 require_once __DIR__ . '/TaskLogService.php';
 
 final class ProductSyncService
 {
-    private JsonStorage $storage;
+    private DatabaseStorage $storage;
     private TaskLogService $taskLogService;
     private string $fileName = 'products.json';
 
     public function __construct()
     {
-        $this->storage = new JsonStorage();
+        $this->storage = new DatabaseStorage();
         $this->taskLogService = new TaskLogService();
     }
 
