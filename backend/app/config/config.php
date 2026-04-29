@@ -10,6 +10,8 @@ const APP_DEBUG = true;
 const APP_SITE_ID = 1;
 
 const BASE_PATH = __DIR__ . '/../../..';
+const APP_PATH = __DIR__ . '/..';
+const APP_VIEWS_PATH = APP_PATH . '/views';
 const STORAGE_PATH = BASE_PATH . '/storage';
 const DATA_PATH = STORAGE_PATH . '/data';
 const LOG_PATH = STORAGE_PATH . '/logs';
