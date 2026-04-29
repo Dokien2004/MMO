@@ -27,6 +27,9 @@ final class ProductSyncService
             if (!isset($item['site_id'])) {
                 $item['site_id'] = APP_SITE_ID;
             }
+            if (!isset($item['sold_count'])) {
+                $item['sold_count'] = 0;
+            }
             $indexed[$item['source_platform'] . '::' . $item['source_product_id']] = $item;
         }
 
@@ -42,6 +45,9 @@ final class ProductSyncService
                 $record['created_at'] = $indexed[$key]['created_at'];
                 $record['affiliate_url'] = $indexed[$key]['affiliate_url'] ?? '';
                 $record['content_status'] = $indexed[$key]['content_status'] ?? 'none';
+                if (!isset($product['sold_count']) && !isset($product['order_count']) && !isset($product['sales_count'])) {
+                    $record['sold_count'] = (int)($indexed[$key]['sold_count'] ?? 0);
+                }
                 $updated++;
             } else {
                 $record['id'] = $this->nextId($indexed);
@@ -79,6 +85,9 @@ final class ProductSyncService
         foreach ($products as &$product) {
             if (!isset($product['site_id'])) {
                 $product['site_id'] = APP_SITE_ID;
+            }
+            if (!isset($product['sold_count'])) {
+                $product['sold_count'] = 0;
             }
         }
         unset($product);
@@ -137,6 +146,8 @@ final class ProductSyncService
             'content_ready' => 0,
             'posted' => 0,
             'archived' => 0,
+            'high_demand' => 0,
+            'max_sold_count' => 0,
         ];
 
         foreach ($products as $product) {
@@ -144,9 +155,35 @@ final class ProductSyncService
             if (isset($statusSummary[$status])) {
                 $statusSummary[$status]++;
             }
+
+            $soldCount = (int)($product['sold_count'] ?? 0);
+            if ($soldCount >= 50) {
+                $statusSummary['high_demand']++;
+            }
+            if ($soldCount > $statusSummary['max_sold_count']) {
+                $statusSummary['max_sold_count'] = $soldCount;
+            }
         }
 
         return $statusSummary;
+    }
+
+    public function topSellingProducts(int $limit = 5, int $minSoldCount = 0): array
+    {
+        $products = array_filter($this->allProducts(), static function (array $product) use ($minSoldCount): bool {
+            return (int)($product['sold_count'] ?? 0) >= $minSoldCount;
+        });
+
+        usort($products, static function (array $left, array $right): int {
+            $soldCompare = (int)($right['sold_count'] ?? 0) <=> (int)($left['sold_count'] ?? 0);
+            if ($soldCompare !== 0) {
+                return $soldCompare;
+            }
+
+            return strcmp((string)($right['updated_at'] ?? ''), (string)($left['updated_at'] ?? ''));
+        });
+
+        return array_slice($products, 0, $limit);
     }
 
     private function normalizeProduct(string $platform, array $product): array
@@ -166,6 +203,7 @@ final class ProductSyncService
             'product_name' => $productName,
             'product_url' => $productUrl,
             'price' => (float)($product['price'] ?? 0),
+            'sold_count' => max(0, (int)($product['sold_count'] ?? $product['order_count'] ?? $product['sales_count'] ?? 0)),
             'status' => $this->sanitizeStatus((string)($product['status'] ?? 'new')),
             'notes' => trim((string)($product['notes'] ?? '')),
         ];

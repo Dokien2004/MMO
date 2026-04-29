@@ -9,6 +9,7 @@ $taskLogService = new TaskLogService();
 $linkService = new AffiliateLinkService();
 $contentService = new ContentService();
 $postingService = new PostingService();
+$automationSettingsService = new AutomationSettingsService();
 
 // ── URL Parsing ──
 $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
@@ -142,6 +143,11 @@ if ($method === 'POST') {
                 json_response(true, 'Đã đánh dấu bài #' . $postId . ' là thất bại.');
                 break;
 
+            case '/settings/automation':
+                $settings = $automationSettingsService->save($_POST);
+                json_response(true, 'Đã lưu cấu hình tự động hóa.', ['data' => $settings]);
+                break;
+
             default:
                 $handled = false;
                 break;
@@ -159,9 +165,11 @@ if ($method === 'POST') {
 // ══════════════════════════════════════════
 
 $samplePayload = json_encode([
-    ['source_product_id' => 'SP-1001', 'product_name' => 'Máy xay mini cầm tay', 'product_url' => 'https://example.com/products/sp-1001', 'price' => 199000, 'status' => 'new'],
-    ['source_product_id' => 'SP-1002', 'product_name' => 'Đèn ngủ LED để bàn', 'product_url' => 'https://example.com/products/sp-1002', 'price' => 259000, 'status' => 'new'],
+    ['source_product_id' => 'SP-1001', 'product_name' => 'Máy xay mini cầm tay', 'product_url' => 'https://example.com/products/sp-1001', 'price' => 199000, 'sold_count' => 180, 'status' => 'new'],
+    ['source_product_id' => 'SP-1002', 'product_name' => 'Đèn ngủ LED để bàn', 'product_url' => 'https://example.com/products/sp-1002', 'price' => 259000, 'sold_count' => 74, 'status' => 'new'],
 ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+$automationSettings = $automationSettingsService->get();
 
 switch ($path) {
     case '/':
@@ -173,6 +181,9 @@ switch ($path) {
             'contentSummary' => $contentService->summary(),
             'postSummary'    => $postingService->summary(),
             'recentLogs'     => $taskLogService->recent(5),
+            'automationSettings' => $automationSettings,
+            'integrationStatus' => $automationSettingsService->integrationStatus(),
+            'topSellingProducts' => $productSyncService->topSellingProducts(5, (int)($automationSettings['min_sold_count'] ?? 0)),
         ]);
         break;
 
@@ -183,6 +194,7 @@ switch ($path) {
             'productSummary' => $productSyncService->dashboardSummary(),
             'products'       => $productSyncService->allProducts(),
             'samplePayload'  => $samplePayload,
+            'automationSettings' => $automationSettings,
         ]);
         break;
 
@@ -218,6 +230,16 @@ switch ($path) {
             'pageTitle'   => 'Nhật ký',
             'currentPage' => 'logs',
             'logs'        => $taskLogService->recent(50),
+        ]);
+        break;
+
+    case '/settings':
+        render('settings/index', [
+            'pageTitle' => 'Tự động hóa',
+            'currentPage' => 'settings',
+            'automationSettings' => $automationSettings,
+            'integrationStatus' => $automationSettingsService->integrationStatus(),
+            'topSellingProducts' => $productSyncService->topSellingProducts(10, 0),
         ]);
         break;
 

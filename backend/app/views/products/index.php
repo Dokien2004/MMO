@@ -17,7 +17,7 @@
     <!-- Sync Form -->
     <div class="card">
         <div class="card-title">📦 Đồng bộ sản phẩm theo đợt</div>
-        <p class="text-muted text-sm" style="margin-bottom:16px">Dán mảng JSON sản phẩm vào ô bên dưới. Mỗi bản ghi cần có <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">source_product_id</code>, <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">product_name</code>, <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">product_url</code>.</p>
+        <p class="text-muted text-sm" style="margin-bottom:16px">Dán mảng JSON sản phẩm vào ô bên dưới. Mỗi bản ghi cần có <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">source_product_id</code>, <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">product_name</code>, <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">product_url</code>. Có thể thêm <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">sold_count</code> để lọc sản phẩm bán chạy.</p>
         <form data-ajax method="POST" action="<?= url('/sync/manual') ?>">
             <div class="form-group">
                 <label class="form-label">Nguồn</label>
@@ -40,6 +40,7 @@
     <!-- Batch Actions -->
     <div class="card">
         <div class="card-title">⚡ Tạo liên kết hàng loạt</div>
+        <div class="hint-box" style="margin-bottom:16px">Ngưỡng sản phẩm bán chạy hiện tại: <strong><?= (int)($automationSettings['min_sold_count'] ?? 0) ?></strong> lượt mua. Cấu hình tại <a href="<?= url('/settings') ?>">Tự động hóa</a>.</div>
         <form data-ajax method="POST" action="<?= url('/links/generate-all') ?>">
             <div class="form-group">
                 <label class="form-label">Mã chiến dịch</label>
@@ -78,7 +79,7 @@
     <?php else: ?>
         <div class="table-wrap">
             <table>
-                <thead><tr><th>Mã</th><th>Sản phẩm</th><th>Giá</th><th>Trạng thái</th><th>Nội dung</th><th>Thao tác</th></tr></thead>
+                <thead><tr><th>Mã</th><th>Sản phẩm</th><th>Giá</th><th>Lượt mua</th><th>Trạng thái</th><th>Nội dung</th><th>Thao tác</th></tr></thead>
                 <tbody>
                 <?php foreach ($products as $product): ?>
                     <tr>
@@ -89,6 +90,7 @@
                             <a href="<?= e((string)$product['product_url']) ?>" target="_blank" rel="noreferrer" class="text-xs">Mở link gốc ↗</a>
                         </td>
                         <td class="text-sm"><?= number_format((float)($product['price'] ?? 0), 0, ',', '.') ?> ₫</td>
+                        <td><span class="metric-pill"><?= number_format((int)($product['sold_count'] ?? 0)) ?></span></td>
                         <td><?= status_badge((string)$product['status']) ?></td>
                         <td><?= status_badge((string)($product['content_status'] ?? 'none')) ?></td>
                         <td>

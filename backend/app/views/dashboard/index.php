@@ -57,6 +57,11 @@
         <div class="value"><?= (int)$productSummary['total'] ?></div>
         <div class="sub"><?= (int)$productSummary['new'] ?> mới</div>
     </div>
+    <div class="stat-card warning">
+        <div class="label">Bán chạy theo ngưỡng</div>
+        <div class="value"><?= (int)($productSummary['high_demand'] ?? 0) ?></div>
+        <div class="sub">Sold ≥ <?= (int)($automationSettings['min_sold_count'] ?? 0) ?></div>
+    </div>
     <div class="stat-card success">
         <div class="label">Đã có link</div>
         <div class="value"><?= (int)$productSummary['linked'] ?></div>
@@ -85,6 +90,11 @@
     <div class="stat-card success">
         <div class="label">Đăng thành công</div>
         <div class="value"><?= (int)$postSummary['success'] ?></div>
+    </div>
+    <div class="stat-card purple">
+        <div class="label">Lượt mua cao nhất</div>
+        <div class="value"><?= number_format((int)($productSummary['max_sold_count'] ?? 0)) ?></div>
+        <div class="sub">Theo dữ liệu đã sync</div>
     </div>
 </div>
 
@@ -137,6 +147,45 @@
             </div>
             <button type="submit" class="btn btn-success btn-full">Lên lịch</button>
         </form>
+    </div>
+</div>
+
+<div class="grid-2">
+    <div class="card">
+        <div class="card-title">⚙️ Auto-post hiện tại</div>
+        <div class="status-stack">
+            <div class="status-line"><span>Campaign mặc định</span><strong><?= e((string)$automationSettings['default_campaign_code']) ?></strong></div>
+            <div class="status-line"><span>Provider</span><strong><?= e((string)$automationSettings['default_content_provider']) ?></strong></div>
+            <div class="status-line"><span>Kênh đăng</span><strong><?= e((string)$automationSettings['default_channel']) ?></strong></div>
+            <div class="status-line"><span>Tự publish</span><?= status_badge(!empty($automationSettings['auto_publish']) ? 'success' : 'failed') ?></div>
+            <div class="status-line"><span>Fanpage API</span><?= status_badge(!empty($integrationStatus['fanpage_api_ready']) ? 'success' : 'failed') ?></div>
+        </div>
+        <a class="btn btn-ghost mt-16" href="<?= url('/settings') ?>">Mở cấu hình tự động hóa</a>
+    </div>
+
+    <div class="card">
+        <div class="card-title">🔥 Sản phẩm có lượt mua cao</div>
+        <?php if (empty($topSellingProducts)): ?>
+            <div class="empty-state"><p>Chưa có sản phẩm nào đạt ngưỡng lượt mua đã cấu hình.</p></div>
+        <?php else: ?>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Sản phẩm</th><th>Lượt mua</th><th>Trạng thái</th></tr></thead>
+                    <tbody>
+                    <?php foreach ($topSellingProducts as $product): ?>
+                        <tr>
+                            <td>
+                                <strong><?= e((string)$product['product_name']) ?></strong>
+                                <div class="sub"><?= e((string)$product['source_platform']) ?> · <?= e((string)$product['source_product_id']) ?></div>
+                            </td>
+                            <td><span class="metric-pill"><?= number_format((int)($product['sold_count'] ?? 0)) ?></span></td>
+                            <td><?= status_badge((string)($product['status'] ?? 'new')) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 
