@@ -1,0 +1,12 @@
+# Affiliate MVP Laptop cron sample
+# Chay theo dot moi 4 gio
+0 */4 * * * /usr/bin/php /opt/lampp/htdocs/affiliate-mvp-laptop/workers/run_pipeline.php affiliate_api /opt/lampp/htdocs/affiliate-mvp-laptop/storage/data/sources/sample_products.json MVP-LAPTOP template_engine fanpage_manual 10 >> /opt/lampp/htdocs/affiliate-mvp-laptop/storage/logs/pipeline.log 2>&1
+
+# Publish cac bai scheduled theo Fanpage API moi 15 phut
+*/15 * * * * /usr/bin/php /opt/lampp/htdocs/affiliate-mvp-laptop/workers/publish_scheduled_posts.php 10 >> /opt/lampp/htdocs/affiliate-mvp-laptop/storage/logs/publish.log 2>&1
+
+# Hoac chay tung buoc rieng neu can debug
+# 0 */6 * * * /usr/bin/php /opt/lampp/htdocs/affiliate-mvp-laptop/workers/sync_sample_products.php affiliate_api /opt/lampp/htdocs/affiliate-mvp-laptop/storage/data/sources/sample_products.json >> /opt/lampp/htdocs/affiliate-mvp-laptop/storage/logs/sync.log 2>&1
+# 10 */6 * * * /usr/bin/php /opt/lampp/htdocs/affiliate-mvp-laptop/workers/generate_links.php MVP-LAPTOP 10 >> /opt/lampp/htdocs/affiliate-mvp-laptop/storage/logs/links.log 2>&1
+# 20 */6 * * * /usr/bin/php /opt/lampp/htdocs/affiliate-mvp-laptop/workers/generate_contents.php template_engine 10 >> /opt/lampp/htdocs/affiliate-mvp-laptop/storage/logs/content.log 2>&1
+# 30 */6 * * * /usr/bin/php /opt/lampp/htdocs/affiliate-mvp-laptop/workers/schedule_posts.php fanpage_manual 10 >> /opt/lampp/htdocs/affiliate-mvp-laptop/storage/logs/posts.log 2>&1

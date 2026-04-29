@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+storage/logs/
+backend/app/config/local.php
+.DS_Store
+Thumbs.db

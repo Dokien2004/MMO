@@ -1,0 +1,26 @@
+[
+  {
+    "source_product_id": "SP-2001",
+    "product_name": "May hut bui mini cam tay",
+    "product_url": "https://example.com/products/sp-2001",
+    "price": 349000,
+    "status": "new",
+    "notes": "Nguon mau cho worker pipeline"
+  },
+  {
+    "source_product_id": "SP-2002",
+    "product_name": "Gia do dien thoai gap gon",
+    "product_url": "https://example.com/products/sp-2002",
+    "price": 89000,
+    "status": "new",
+    "notes": "Nguon mau cho worker pipeline"
+  },
+  {
+    "source_product_id": "SP-2003",
+    "product_name": "Binh giu nhiet mini 420ml",
+    "product_url": "https://example.com/products/sp-2003",
+    "price": 179000,
+    "status": "new",
+    "notes": "Nguon mau cho worker pipeline"
+  }
+]

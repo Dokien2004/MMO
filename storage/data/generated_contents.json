@@ -1,0 +1,47 @@
+[
+    {
+        "id": 3,
+        "product_id": 3,
+        "affiliate_link_id": null,
+        "title": "Review nhanh: Binh giu nhiet mini 420ml",
+        "body": "Binh giu nhiet mini 420ml dang la mot lua chon de test MVP affiliate theo dot.\n\nGia tham khao hien tai la 179.000 VND, phu hop de tao bai review ngan va de doc.\n\nDiem noi bat: gon nhe, de gioi thieu, de gan vao bai dang Fanpage thu cong.\n\nXem san pham tai day: https://example.com/products/sp-2003?aff=mvp-laptop-affiliate_api-SP-2003",
+        "hashtags": "#affiliate #mvp #reviewnhanh #affiliateapi",
+        "call_to_action": "Nhan vao link de xem chi tiet va gia moi nhat.",
+        "ai_provider": "template_engine",
+        "status": "approved",
+        "notes": "Sinh boi template noi bo. Co the thay bang API AI that sau.",
+        "created_at": "2026-04-29T12:30:56+07:00",
+        "updated_at": "2026-04-29T12:30:56+07:00",
+        "site_id": 1
+    },
+    {
+        "id": 2,
+        "product_id": 2,
+        "affiliate_link_id": null,
+        "title": "Review nhanh: Gia do dien thoai gap gon",
+        "body": "Gia do dien thoai gap gon dang la mot lua chon de test MVP affiliate theo dot.\n\nGia tham khao hien tai la 89.000 VND, phu hop de tao bai review ngan va de doc.\n\nDiem noi bat: gon nhe, de gioi thieu, de gan vao bai dang Fanpage thu cong.\n\nXem san pham tai day: https://example.com/products/sp-2002?aff=mvp-laptop-affiliate_api-SP-2002",
+        "hashtags": "#affiliate #mvp #reviewnhanh #affiliateapi",
+        "call_to_action": "Nhan vao link de xem chi tiet va gia moi nhat.",
+        "ai_provider": "template_engine",
+        "status": "approved",
+        "notes": "Sinh boi template noi bo. Co the thay bang API AI that sau.",
+        "created_at": "2026-04-29T12:30:56+07:00",
+        "updated_at": "2026-04-29T12:30:56+07:00",
+        "site_id": 1
+    },
+    {
+        "id": 1,
+        "product_id": 1,
+        "affiliate_link_id": null,
+        "title": "Review nhanh: May hut bui mini cam tay",
+        "body": "May hut bui mini cam tay dang la mot lua chon de test MVP affiliate theo dot.\n\nGia tham khao hien tai la 349.000 VND, phu hop de tao bai review ngan va de doc.\n\nDiem noi bat: gon nhe, de gioi thieu, de gan vao bai dang Fanpage thu cong.\n\nXem san pham tai day: https://example.com/products/sp-2001?aff=mvp-laptop-affiliate_api-SP-2001",
+        "hashtags": "#affiliate #mvp #reviewnhanh #affiliateapi",
+        "call_to_action": "Nhan vao link de xem chi tiet va gia moi nhat.",
+        "ai_provider": "template_engine",
+        "status": "approved",
+        "notes": "Sinh boi template noi bo. Co the thay bang API AI that sau.",
+        "created_at": "2026-04-29T12:30:56+07:00",
+        "updated_at": "2026-04-29T12:30:56+07:00",
+        "site_id": 1
+    }
+]
