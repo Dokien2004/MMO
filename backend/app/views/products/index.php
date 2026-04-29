@@ -9,7 +9,7 @@
     <div class="stat-card accent"><div class="label">Tổng</div><div class="value"><?= (int)$productSummary['total'] ?></div></div>
     <div class="stat-card"><div class="label">Mới</div><div class="value"><?= (int)$productSummary['new'] ?></div></div>
     <div class="stat-card success"><div class="label">Đã link</div><div class="value"><?= (int)$productSummary['linked'] ?></div></div>
-    <div class="stat-card purple"><div class="label">Content ready</div><div class="value"><?= (int)$productSummary['content_ready'] ?></div></div>
+    <div class="stat-card purple"><div class="label">Có nội dung</div><div class="value"><?= (int)$productSummary['content_ready'] ?></div></div>
     <div class="stat-card success"><div class="label">Đã đăng</div><div class="value"><?= (int)$productSummary['posted'] ?></div></div>
 </div>
 
@@ -17,7 +17,7 @@
     <!-- Sync Form -->
     <div class="card">
         <div class="card-title">📦 Đồng bộ sản phẩm theo đợt</div>
-        <p class="text-muted text-sm" style="margin-bottom:16px">Paste mảng JSON sản phẩm. Mỗi record cần <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">source_product_id</code>, <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">product_name</code>, <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">product_url</code>.</p>
+        <p class="text-muted text-sm" style="margin-bottom:16px">Dán mảng JSON sản phẩm vào ô bên dưới. Mỗi bản ghi cần có <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">source_product_id</code>, <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">product_name</code>, <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">product_url</code>.</p>
         <form data-ajax method="POST" action="<?= url('/sync/manual') ?>">
             <div class="form-group">
                 <label class="form-label">Nguồn</label>
@@ -26,38 +26,38 @@
                     <option value="shopee">Shopee</option>
                     <option value="tiktokshop">TikTok Shop</option>
                     <option value="lazada">Lazada</option>
-                    <option value="manual">Manual</option>
+                    <option value="manual">Nhập tay</option>
                 </select>
             </div>
             <div class="form-group">
-                <label class="form-label">JSON Payload</label>
+                <label class="form-label">Dữ liệu JSON</label>
                 <textarea class="form-control" name="products_json"><?= e($samplePayload) ?></textarea>
             </div>
-            <button type="submit" class="btn btn-primary">Đồng bộ sản phẩm</button>
+            <button type="submit" class="btn btn-primary btn-full">Đồng bộ sản phẩm</button>
         </form>
     </div>
 
     <!-- Batch Actions -->
     <div class="card">
-        <div class="card-title">⚡ Tạo link hàng loạt</div>
+        <div class="card-title">⚡ Tạo liên kết hàng loạt</div>
         <form data-ajax method="POST" action="<?= url('/links/generate-all') ?>">
             <div class="form-group">
-                <label class="form-label">Campaign code</label>
+                <label class="form-label">Mã chiến dịch</label>
                 <input class="form-control" name="campaign_code" value="MVP-LAPTOP">
             </div>
             <div class="form-group">
                 <label class="form-label">Số SP xử lý</label>
                 <input class="form-control" name="limit" type="number" min="1" max="20" value="5">
             </div>
-            <button type="submit" class="btn btn-accent" style="width:100%">Tạo link hàng loạt</button>
+            <button type="submit" class="btn btn-accent btn-full">Tạo liên kết hàng loạt</button>
         </form>
         <hr style="border:none;border-top:1px solid var(--border);margin:20px 0">
-        <div class="card-title">✨ Sinh draft hàng loạt</div>
+        <div class="card-title">✨ Sinh nội dung hàng loạt</div>
         <form data-ajax method="POST" action="<?= url('/contents/generate-all') ?>">
             <div class="form-group">
-                <label class="form-label">Provider</label>
+                <label class="form-label">Nguồn sinh</label>
                 <select class="form-control" name="provider">
-                    <option value="template_engine">Template Engine</option>
+                    <option value="template_engine">Mẫu có sẵn</option>
                     <option value="openai">OpenAI</option>
                 </select>
             </div>
@@ -65,7 +65,7 @@
                 <label class="form-label">Số SP xử lý</label>
                 <input class="form-control" name="limit" type="number" min="1" max="20" value="5">
             </div>
-            <button type="submit" class="btn btn-purple" style="width:100%">Sinh draft content</button>
+            <button type="submit" class="btn btn-purple btn-full">Sinh bản nháp</button>
         </form>
     </div>
 </div>
@@ -78,7 +78,7 @@
     <?php else: ?>
         <div class="table-wrap">
             <table>
-                <thead><tr><th>ID</th><th>Sản phẩm</th><th>Giá</th><th>Status</th><th>Content</th><th>Hành động</th></tr></thead>
+                <thead><tr><th>Mã</th><th>Sản phẩm</th><th>Giá</th><th>Trạng thái</th><th>Nội dung</th><th>Thao tác</th></tr></thead>
                 <tbody>
                 <?php foreach ($products as $product): ?>
                     <tr>
@@ -101,7 +101,7 @@
                                 <form data-ajax method="POST" action="<?= url('/contents/generate') ?>">
                                     <input type="hidden" name="product_id" value="<?= (int)$product['id'] ?>">
                                     <input type="hidden" name="provider" value="template_engine">
-                                    <button type="submit" class="btn btn-purple btn-sm">Sinh draft</button>
+                                    <button type="submit" class="btn btn-purple btn-sm">Sinh nháp</button>
                                 </form>
                             </div>
                         </td>

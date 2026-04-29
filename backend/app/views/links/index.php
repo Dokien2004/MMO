@@ -1,31 +1,31 @@
 <div class="page-header">
     <div>
-        <h2>Affiliate Links</h2>
-        <p>Quản lý affiliate link đã tạo</p>
+        <h2>Liên kết Affiliate</h2>
+        <p>Quản lý liên kết affiliate đã tạo</p>
     </div>
 </div>
 
 <div class="stats-grid">
-    <div class="stat-card accent"><div class="label">Tổng links</div><div class="value"><?= (int)$linkSummary['total'] ?></div></div>
-    <div class="stat-card success"><div class="label">Active</div><div class="value"><?= (int)$linkSummary['active'] ?></div></div>
-    <div class="stat-card warning"><div class="label">Expired</div><div class="value"><?= (int)$linkSummary['expired'] ?></div></div>
-    <div class="stat-card danger"><div class="label">Error</div><div class="value"><?= (int)$linkSummary['error'] ?></div></div>
+    <div class="stat-card accent"><div class="label">Tổng liên kết</div><div class="value"><?= (int)$linkSummary['total'] ?></div></div>
+    <div class="stat-card success"><div class="label">Hoạt động</div><div class="value"><?= (int)$linkSummary['active'] ?></div></div>
+    <div class="stat-card warning"><div class="label">Hết hạn</div><div class="value"><?= (int)$linkSummary['expired'] ?></div></div>
+    <div class="stat-card danger"><div class="label">Lỗi</div><div class="value"><?= (int)$linkSummary['error'] ?></div></div>
 </div>
 
 <div class="card">
-    <div class="card-title">🔗 Danh sách affiliate links</div>
+    <div class="card-title">🔗 Danh sách liên kết</div>
     <?php if (empty($links)): ?>
-        <div class="empty-state"><p>Chưa có affiliate link nào. Vào trang <a href="<?= url('/products') ?>">Sản phẩm</a> để tạo link.</p></div>
+        <div class="empty-state"><p>Chưa có liên kết nào. Vào trang <a href="<?= url('/products') ?>">Sản phẩm</a> để tạo.</p></div>
     <?php else: ?>
         <div class="table-wrap">
             <table>
-                <thead><tr><th>ID</th><th>Sản phẩm</th><th>Campaign</th><th>Affiliate URL</th><th>Status</th><th>Ngày tạo</th></tr></thead>
+                <thead><tr><th>Mã</th><th>Sản phẩm</th><th>Chiến dịch</th><th>Đường dẫn affiliate</th><th>Trạng thái</th><th>Ngày tạo</th></tr></thead>
                 <tbody>
                 <?php foreach ($links as $link): ?>
                     <tr>
                         <td>#<?= (int)$link['id'] ?></td>
                         <td>
-                            <strong>Product #<?= (int)$link['product_id'] ?></strong>
+                            <strong>SP #<?= (int)$link['product_id'] ?></strong>
                             <div class="sub"><?= e((string)$link['source_platform']) ?></div>
                         </td>
                         <td><span class="badge badge-active"><?= e((string)$link['campaign_code']) ?></span></td>

@@ -8,14 +8,14 @@
 <div class="card">
     <div class="card-title">
         <svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:var(--accent);fill:none;stroke-width:2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-        Job Logs
+        Nhật ký tác vụ
     </div>
     <?php if (empty($logs)): ?>
-        <div class="empty-state"><p>Chưa có log nào.</p></div>
+        <div class="empty-state"><p>Chưa có nhật ký nào.</p></div>
     <?php else: ?>
         <div class="table-wrap">
             <table>
-                <thead><tr><th>ID</th><th>Task</th><th>Status</th><th>Chi tiết</th><th>Thời gian</th></tr></thead>
+                <thead><tr><th>Mã</th><th>Tác vụ</th><th>Trạng thái</th><th>Chi tiết</th><th>Thời gian</th></tr></thead>
                 <tbody>
                 <?php foreach ($logs as $log): ?>
                     <tr>

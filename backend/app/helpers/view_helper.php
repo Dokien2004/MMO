@@ -109,7 +109,15 @@ function asset(string $path): string
  */
 function status_badge(string $status): string
 {
-    $display = str_replace('_', ' ', $status);
+    $labels = [
+        'new' => 'Mới', 'linked' => 'Đã link', 'content_ready' => 'Có nội dung',
+        'posted' => 'Đã đăng', 'archived' => 'Lưu trữ',
+        'active' => 'Hoạt động', 'expired' => 'Hết hạn', 'error' => 'Lỗi',
+        'draft' => 'Nháp', 'approved' => 'Đã duyệt', 'rejected' => 'Từ chối', 'used' => 'Đã dùng',
+        'scheduled' => 'Đã lên lịch', 'success' => 'Thành công', 'failed' => 'Thất bại',
+        'running' => 'Đang chạy', 'pending' => 'Chờ xử lý', 'none' => 'Chưa có',
+    ];
+    $display = $labels[$status] ?? ucfirst(str_replace('_', ' ', $status));
     $cssClass = 'badge-' . str_replace('_', '-', $status);
-    return '<span class="badge ' . $cssClass . '">' . e(ucfirst($display)) . '</span>';
+    return '<span class="badge ' . $cssClass . '">' . e($display) . '</span>';
 }
