@@ -234,43 +234,201 @@ $samplePayload = json_encode([
     ],
 ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 ?><!doctype html>
-<html lang="en">
+<html lang="vi">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?php echo htmlspecialchars(APP_NAME, ENT_QUOTES, 'UTF-8'); ?></title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
-        main { max-width: 1320px; margin: 0 auto; padding: 32px 20px 48px; }
-        .hero, .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); }
-        .hero { padding: 24px; margin-bottom: 20px; }
+        :root {
+            --bg: #eef3f8;
+            --surface: rgba(255,255,255,.9);
+            --surface-strong: #ffffff;
+            --text: #0f172a;
+            --muted: #64748b;
+            --line: #e2e8f0;
+            --primary: #0f766e;
+            --primary-dark: #115e59;
+            --blue: #2563eb;
+            --purple: #7c3aed;
+            --green: #16a34a;
+            --red: #dc2626;
+            --shadow: 0 18px 50px rgba(15, 23, 42, .10);
+            --radius: 18px;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            margin: 0;
+            background:
+                radial-gradient(circle at top left, rgba(20,184,166,.18), transparent 32rem),
+                radial-gradient(circle at top right, rgba(59,130,246,.16), transparent 28rem),
+                var(--bg);
+            color: var(--text);
+        }
+        main { max-width: 1440px; margin: 0 auto; padding: 28px 18px 48px; }
+        h1, h2 { margin: 0; letter-spacing: -0.03em; }
+        h1 { font-size: clamp(30px, 4vw, 48px); line-height: 1.05; }
+        h2 { font-size: 18px; margin-bottom: 12px; }
+        a { color: var(--blue); text-decoration: none; font-weight: 700; }
+        a:hover { text-decoration: underline; }
+        .hero, .card {
+            background: var(--surface);
+            border: 1px solid rgba(226,232,240,.9);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(10px);
+        }
+        .hero {
+            padding: 28px;
+            margin-bottom: 18px;
+            display: grid;
+            grid-template-columns: 1.15fr .85fr;
+            gap: 22px;
+            align-items: end;
+            overflow: hidden;
+            position: relative;
+        }
+        .hero::after {
+            content: "";
+            position: absolute;
+            right: -80px;
+            top: -80px;
+            width: 240px;
+            height: 240px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, rgba(20,184,166,.22), rgba(59,130,246,.18));
+            pointer-events: none;
+        }
+        .hero p { margin: 12px 0 0; line-height: 1.6; }
+        .api-links { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+        .api-links code, code {
+            display: inline-flex;
+            align-items: center;
+            background: #ecfeff;
+            color: #155e75;
+            border: 1px solid #cffafe;
+            padding: 7px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 800;
+        }
         .grid { display: grid; gap: 16px; }
-        .stats { grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); margin-bottom: 20px; }
-        .stat { padding: 18px; }
-        .stat strong { display: block; font-size: 28px; margin-top: 8px; }
-        .layout { grid-template-columns: 1.1fr 0.9fr; align-items: start; }
-        .triple { grid-template-columns: 1fr 1fr 1fr; align-items: start; }
-        .quad { grid-template-columns: 1fr 1fr; align-items: start; }
+        .stats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 18px; }
+        .stat {
+            padding: 18px;
+            position: relative;
+            overflow: hidden;
+            min-height: 112px;
+        }
+        .stat::before {
+            content: "";
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 5px;
+            background: linear-gradient(180deg, var(--primary), var(--blue));
+            border-radius: var(--radius) 0 0 var(--radius);
+        }
+        .stat span { display: block; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+        .stat strong { display: block; font-size: 34px; line-height: 1; margin-top: 14px; letter-spacing: -0.05em; }
+        .layout { grid-template-columns: minmax(0, 1.25fr) minmax(360px, .75fr); align-items: start; }
+        .triple { grid-template-columns: repeat(3, 1fr); align-items: start; }
+        .quad { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
         .card { padding: 20px; }
-        .muted { color: #475569; }
-        textarea, select, input { width: 100%; box-sizing: border-box; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; }
-        textarea { min-height: 280px; font-family: monospace; }
-        button { background: #0f766e; color: #fff; border: none; border-radius: 10px; padding: 12px 16px; cursor: pointer; }
-        .button-secondary { background: #1d4ed8; }
-        .button-light { background: #334155; }
-        .button-approve { background: #15803d; }
-        .button-reject { background: #b91c1c; }
-        .button-post { background: #7c3aed; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
-        .alert { padding: 14px 16px; border-radius: 10px; margin-bottom: 16px; }
-        .alert.success { background: #dcfce7; color: #166534; }
-        .alert.error { background: #fee2e2; color: #991b1b; }
-        code { background: #e2e8f0; padding: 2px 6px; border-radius: 6px; }
-        .mini-form { display: grid; gap: 8px; }
-        .mono { font-family: monospace; font-size: 12px; word-break: break-all; }
-        .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-        @media (max-width: 1100px) { .layout, .triple, .quad { grid-template-columns: 1fr; } }
+        .card > h2 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .card > h2::before {
+            content: "";
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            background: var(--primary);
+            box-shadow: 0 0 0 5px rgba(15,118,110,.10);
+        }
+        .muted { color: var(--muted); }
+        label { display: block; font-size: 13px; font-weight: 800; color: #334155; margin-bottom: 7px; }
+        textarea, select, input {
+            width: 100%;
+            padding: 12px 13px;
+            border-radius: 12px;
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            color: var(--text);
+            outline: none;
+            transition: border-color .18s ease, box-shadow .18s ease;
+        }
+        textarea:focus, select:focus, input:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(15,118,110,.12); }
+        textarea { min-height: 300px; font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; line-height: 1.55; resize: vertical; }
+        button {
+            width: fit-content;
+            min-height: 42px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #fff;
+            border: 0;
+            border-radius: 12px;
+            padding: 11px 15px;
+            cursor: pointer;
+            font-weight: 800;
+            box-shadow: 0 10px 20px rgba(15,118,110,.18);
+            transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+        }
+        button:hover { transform: translateY(-1px); filter: brightness(1.03); box-shadow: 0 14px 24px rgba(15,118,110,.22); }
+        button:active { transform: translateY(0); }
+        .button-secondary { background: linear-gradient(135deg, #3b82f6, #1d4ed8); box-shadow: 0 10px 20px rgba(37,99,235,.18); }
+        .button-light { background: linear-gradient(135deg, #475569, #334155); box-shadow: 0 10px 20px rgba(51,65,85,.16); }
+        .button-approve { background: linear-gradient(135deg, #22c55e, #15803d); box-shadow: 0 10px 20px rgba(34,197,94,.18); }
+        .button-reject { background: linear-gradient(135deg, #ef4444, #b91c1c); box-shadow: 0 10px 20px rgba(239,68,68,.18); }
+        .button-post { background: linear-gradient(135deg, #8b5cf6, #6d28d9); box-shadow: 0 10px 20px rgba(124,58,237,.18); }
+        table { width: 100%; border-collapse: separate; border-spacing: 0; overflow: hidden; }
+        thead th {
+            background: #f8fafc;
+            color: #475569;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            font-weight: 900;
+        }
+        th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+        tbody tr { transition: background .16s ease; }
+        tbody tr:hover { background: #f8fafc; }
+        tbody tr:last-child td { border-bottom: 0; }
+        td:first-child { font-weight: 800; color: #334155; white-space: nowrap; }
+        .alert { padding: 14px 16px; border-radius: 14px; margin-bottom: 16px; font-weight: 800; border: 1px solid transparent; }
+        .alert.success { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+        .alert.error { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+        .mini-form { display: grid; gap: 10px; }
+        .mini-form form { padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: #f8fafc; }
+        .mono {
+            font-family: "SFMono-Regular", Consolas, monospace;
+            font-size: 12px;
+            line-height: 1.45;
+            word-break: break-word;
+            background: #f8fafc;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 8px;
+            color: #334155;
+        }
+        .inline-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .inline-actions form { margin: 0; }
+        .inline-actions button, td button { min-height: 36px; padding: 9px 11px; font-size: 12px; }
+        .section-spaced { margin-top: 18px; }
+        @media (max-width: 1180px) {
+            .hero, .layout, .triple, .quad { grid-template-columns: 1fr; }
+            .api-links { justify-content: flex-start; }
+        }
+        @media (max-width: 760px) {
+            main { padding: 16px 10px 32px; }
+            .hero, .card { border-radius: 16px; }
+            .hero, .card { padding: 16px; }
+            .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            table { display: block; overflow-x: auto; white-space: nowrap; }
+            .mono { white-space: normal; }
+            button { width: 100%; }
+        }
     </style>
 </head>
 <body>
@@ -278,7 +436,7 @@ $samplePayload = json_encode([
     <section class="hero">
         <h1><?php echo htmlspecialchars(APP_NAME, ENT_QUOTES, 'UTF-8'); ?></h1>
         <p class="muted">Flow hien tai: dong bo san pham -> affiliate link -> draft content -> approve/reject -> schedule post -> mark posted/failed.</p>
-        <p class="muted">API san pham: <code><?php echo htmlspecialchars($route('/api/products'), ENT_QUOTES, 'UTF-8'); ?></code> | API links: <code><?php echo htmlspecialchars($route('/api/links'), ENT_QUOTES, 'UTF-8'); ?></code> | API contents: <code><?php echo htmlspecialchars($route('/api/contents'), ENT_QUOTES, 'UTF-8'); ?></code> | API posts: <code><?php echo htmlspecialchars($route('/api/posts'), ENT_QUOTES, 'UTF-8'); ?></code></p>
+        <div class="api-links"><code><?php echo htmlspecialchars($route('/api/products'), ENT_QUOTES, 'UTF-8'); ?></code><code><?php echo htmlspecialchars($route('/api/links'), ENT_QUOTES, 'UTF-8'); ?></code><code><?php echo htmlspecialchars($route('/api/contents'), ENT_QUOTES, 'UTF-8'); ?></code><code><?php echo htmlspecialchars($route('/api/posts'), ENT_QUOTES, 'UTF-8'); ?></code></div>
     </section>
 
     <?php if ($flashMessage !== null): ?>
@@ -347,7 +505,7 @@ $samplePayload = json_encode([
         </div>
     </section>
 
-    <section class="grid quad" style="margin-top: 20px;">
+    <section class="grid quad section-spaced">
         <div class="card">
             <h2>San pham gan day</h2>
             <?php if ($recentProducts === []): ?>
@@ -400,7 +558,7 @@ $samplePayload = json_encode([
         </div>
     </section>
 
-    <section class="grid quad" style="margin-top: 20px;">
+    <section class="grid quad section-spaced">
         <div class="card">
             <h2>Draft content gan day</h2>
             <?php if ($recentContents === []): ?>
@@ -456,7 +614,7 @@ $samplePayload = json_encode([
         </div>
     </section>
 
-    <section class="card" style="margin-top: 20px;">
+    <section class="card section-spaced">
         <h2>Job logs gan day</h2>
         <?php if ($recentLogs === []): ?>
             <p class="muted">Chua co log.</p>
