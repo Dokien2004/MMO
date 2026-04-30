@@ -8,7 +8,12 @@ require_once __DIR__ . '/TaskLogService.php';
 /**
  * ScraperService — Cào dữ liệu sản phẩm bán chạy từ các sàn TMĐT.
  *
- * Hỗ trợ: Shopee (qua API search public), TikTok Shop.
+ * Hỗ trợ:
+ * - Shopee: search theo keyword, trending theo danh mục, daily discover
+ * - TikTok Shop: search theo keyword
+ * - Lazada: search theo keyword
+ *
+ * Chế độ Trending: Cào top bán chạy KHÔNG cần nhập từ khóa.
  * Kết quả được đẩy vào ProductSyncService để lưu DB.
  */
 final class ScraperService
@@ -30,12 +35,38 @@ final class ScraperService
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     ];
 
+    /** Danh mục Shopee phổ biến (catid) để cào trending */
+    public const SHOPEE_CATEGORIES = [
+        11036132 => 'Điện tử',
+        11036030 => 'Máy tính & Laptop',
+        11036670 => 'Nhà cửa & Đời sống',
+        11035567 => 'Thời trang nam',
+        11035639 => 'Thời trang nữ',
+        11036279 => 'Sức khỏe & Sắc đẹp',
+        11036525 => 'Bách hóa online',
+        11036594 => 'Phụ kiện & Trang sức',
+        11036915 => 'Đồ chơi',
+        11036101 => 'Thiết bị điện gia dụng',
+        11035853 => 'Giày dép nam',
+        11035801 => 'Giày dép nữ',
+        11036382 => 'Mẹ & Bé',
+        11036812 => 'Thể thao & Du lịch',
+    ];
+
     public function __construct()
     {
         $this->productSyncService = new ProductSyncService();
         $this->taskLogService = new TaskLogService();
         $this->pdo = db_pdo();
         $this->ensureConfigTable();
+    }
+
+    /**
+     * Lấy danh sách categories có sẵn cho trending.
+     */
+    public function getCategories(): array
+    {
+        return self::SHOPEE_CATEGORIES;
     }
 
     // ─── Scraper Configs CRUD ─────────────────────────
@@ -67,8 +98,9 @@ final class ScraperService
             ? $data['sort_by'] : 'sold';
         $isActive = (int)($data['is_active'] ?? 1);
 
+        // Keyword rỗng = chế độ trending (cào theo danh mục)
         if ($keyword === '') {
-            throw new InvalidArgumentException('Từ khóa tìm kiếm không được để trống.');
+            $keyword = '__trending__';
         }
 
         if ($id > 0) {
@@ -120,25 +152,31 @@ final class ScraperService
         $maxPages = (int)$config['max_pages'];
         $minSold = (int)$config['min_sold_count'];
         $sortBy = $config['sort_by'];
+        $isTrending = ($keyword === '__trending__');
 
         $allProducts = [];
         $errors = [];
 
         $this->taskLogService->create('scraper_run', 'pending', [
-            'config_id' => $configId, 'keyword' => $keyword, 'platform' => $platform,
+            'config_id' => $configId, 'keyword' => $isTrending ? 'TRENDING' : $keyword, 'platform' => $platform,
         ]);
 
-        for ($page = 1; $page <= $maxPages; $page++) {
-            try {
-                $products = $this->scrapeSearchPage($platform, $keyword, $page, $sortBy);
-                $allProducts = array_merge($allProducts, $products);
-                // Rate limit
-                if ($page < $maxPages) {
-                    usleep((int)($this->requestDelay * 1_000_000));
+        if ($isTrending) {
+            // Chế độ trending: cào top bán chạy theo danh mục
+            $allProducts = $this->scrapeTrendingProducts($platform, $maxPages, $minSold, $errors);
+        } else {
+            // Chế độ keyword: search bình thường
+            for ($page = 1; $page <= $maxPages; $page++) {
+                try {
+                    $products = $this->scrapeSearchPage($platform, $keyword, $page, $sortBy);
+                    $allProducts = array_merge($allProducts, $products);
+                    if ($page < $maxPages) {
+                        usleep((int)($this->requestDelay * 1_000_000));
+                    }
+                } catch (\Throwable $e) {
+                    $errors[] = "Trang {$page}: {$e->getMessage()}";
+                    error_log("[SCRAPER] Error page {$page} for '{$keyword}': {$e->getMessage()}");
                 }
-            } catch (\Throwable $e) {
-                $errors[] = "Trang {$page}: {$e->getMessage()}";
-                error_log("[SCRAPER] Error page {$page} for '{$keyword}': {$e->getMessage()}");
             }
         }
 
@@ -154,21 +192,50 @@ final class ScraperService
         }
 
         // Cập nhật last_run
-        $stmt = $this->pdo->prepare(
-            'UPDATE scraper_configs SET last_run_at = NOW(), last_run_result = :res, updated_at = NOW()
-             WHERE id = :id AND site_id = :sid'
-        );
-        $resultJson = json_encode([
+        $this->updateLastRun($configId, $allProducts, $filtered, $syncResult, $errors);
+
+        $label = $isTrending ? 'TRENDING' : $keyword;
+        $this->taskLogService->create('scraper_run', empty($errors) ? 'success' : 'failed', [
+            'config_id' => $configId, 'keyword' => $label,
+        ], [
             'scraped' => count($allProducts),
             'filtered' => count($filtered),
-            'synced_new' => $syncResult['summary']['inserted_count'],
-            'synced_updated' => $syncResult['summary']['updated_count'],
-            'errors' => $errors,
-        ], JSON_UNESCAPED_UNICODE);
-        $stmt->execute([':res' => $resultJson, ':id' => $configId, ':sid' => APP_SITE_ID]);
+            'synced' => $syncResult['summary']['inserted_count'] + $syncResult['summary']['updated_count'],
+        ], implode('; ', $errors) ?: null);
 
-        $this->taskLogService->create('scraper_run', empty($errors) ? 'success' : 'failed', [
-            'config_id' => $configId, 'keyword' => $keyword,
+        return [
+            'scraped' => count($allProducts),
+            'filtered' => count($filtered),
+            'synced' => $syncResult['summary']['inserted_count'] + $syncResult['summary']['updated_count'],
+            'errors' => $errors,
+        ];
+    }
+
+    /**
+     * Cào trending 1 lần (không cần config) — endpoint nhanh cho UI.
+     * @param string   $platform    shopee|tiktokshop|lazada
+     * @param int[]    $categoryIds Danh mục Shopee catid (rỗng = tất cả)
+     * @param int      $minSold     Ngưỡng lượt mua tối thiểu
+     * @param int      $maxPages    Số trang mỗi danh mục
+     */
+    public function scrapeTrending(string $platform = 'shopee', array $categoryIds = [], int $minSold = 100, int $maxPages = 2): array
+    {
+        $platform = $this->sanitizePlatform($platform);
+        $errors = [];
+
+        $allProducts = $this->scrapeTrendingProducts($platform, $maxPages, $minSold, $errors, $categoryIds);
+
+        // Lọc
+        $filtered = array_filter($allProducts, static fn(array $p) => (int)($p['sold_count'] ?? 0) >= $minSold);
+
+        // Sync
+        $syncResult = ['summary' => ['inserted_count' => 0, 'updated_count' => 0]];
+        if (!empty($filtered)) {
+            $syncResult = $this->productSyncService->syncBatch($platform, array_values($filtered));
+        }
+
+        $this->taskLogService->create('scraper_trending', empty($errors) ? 'success' : 'failed', [
+            'platform' => $platform, 'categories' => count($categoryIds) ?: 'all',
         ], [
             'scraped' => count($allProducts),
             'filtered' => count($filtered),
@@ -230,7 +297,162 @@ final class ScraperService
         ];
     }
 
-    // ─── Platform-Specific Scrapers ───────────────────
+    // ─── Trending Scrapers (Không cần keyword) ─────────
+
+    /**
+     * Cào sản phẩm trending theo danh mục — KHÔNG cần từ khóa.
+     */
+    private function scrapeTrendingProducts(string $platform, int $maxPages, int $minSold, array &$errors, array $categoryIds = []): array
+    {
+        $allProducts = [];
+
+        if ($platform === 'shopee') {
+            // 1. Daily Discover (sản phẩm gợi ý hot)
+            try {
+                $discover = $this->scrapeShopeeDiscover($maxPages);
+                $allProducts = array_merge($allProducts, $discover);
+            } catch (\Throwable $e) {
+                $errors[] = 'Discover: ' . $e->getMessage();
+            }
+            usleep((int)($this->requestDelay * 1_000_000));
+
+            // 2. Top bán chạy theo từng danh mục
+            $cats = !empty($categoryIds) ? $categoryIds : array_keys(self::SHOPEE_CATEGORIES);
+            foreach ($cats as $catId) {
+                $catName = self::SHOPEE_CATEGORIES[$catId] ?? "Cat#{$catId}";
+                for ($page = 1; $page <= min($maxPages, 3); $page++) {
+                    try {
+                        $products = $this->scrapeShopeeCategory((int)$catId, $page);
+                        $allProducts = array_merge($allProducts, $products);
+                    } catch (\Throwable $e) {
+                        $errors[] = "{$catName} trang {$page}: {$e->getMessage()}";
+                    }
+                    usleep((int)($this->requestDelay * 1_000_000));
+                }
+            }
+        } else {
+            // Fallback: dùng các keyword phổ biến để cào trending
+            $trendingKeywords = ['bán chạy', 'hot deal', 'giảm giá sốc', 'freeship', 'best seller'];
+            foreach ($trendingKeywords as $kw) {
+                try {
+                    $products = $this->scrapeSearchPage($platform, $kw, 1, 'sold');
+                    $allProducts = array_merge($allProducts, $products);
+                } catch (\Throwable $e) {
+                    $errors[] = "Keyword '{$kw}': {$e->getMessage()}";
+                }
+                usleep((int)($this->requestDelay * 1_000_000));
+            }
+        }
+
+        // Deduplicate theo source_product_id
+        $unique = [];
+        foreach ($allProducts as $p) {
+            $key = $p['source_product_id'] ?? '';
+            if ($key !== '' && !isset($unique[$key])) {
+                $unique[$key] = $p;
+            }
+        }
+
+        // Sort theo sold_count giảm dần
+        $result = array_values($unique);
+        usort($result, fn($a, $b) => (int)($b['sold_count'] ?? 0) <=> (int)($a['sold_count'] ?? 0));
+
+        return $result;
+    }
+
+    /**
+     * Shopee Daily Discover — sản phẩm gợi ý nổi bật.
+     */
+    private function scrapeShopeeDiscover(int $maxPages = 2): array
+    {
+        $products = [];
+        for ($page = 0; $page < $maxPages; $page++) {
+            $offset = $page * 60;
+            $url = 'https://shopee.vn/api/v4/recommend/recommend?' . http_build_query([
+                'bundle' => 'daily_discover_main',
+                'limit' => 60,
+                'offset' => $offset,
+            ]);
+
+            $body = $this->httpGet($url, [
+                'Referer: https://shopee.vn/',
+                'Accept: application/json',
+                'X-Shopee-Language: vi',
+            ]);
+
+            $data = json_decode($body, true);
+            $sections = $data['data']['sections'] ?? [];
+            foreach ($sections as $section) {
+                $items = $section['data']['item'] ?? [];
+                foreach ($items as $item) {
+                    $parsed = $this->parseShopeeItem($item, 'Shopee Daily Discover');
+                    if ($parsed) $products[] = $parsed;
+                }
+            }
+
+            if ($page < $maxPages - 1) {
+                usleep((int)($this->requestDelay * 1_000_000));
+            }
+        }
+        return $products;
+    }
+
+    /**
+     * Shopee: Top bán chạy theo danh mục (category ID).
+     */
+    private function scrapeShopeeCategory(int $catId, int $page = 1): array
+    {
+        $offset = ($page - 1) * 60;
+        $url = 'https://shopee.vn/api/v4/search/search_items?' . http_build_query([
+            'by' => 'sold',
+            'limit' => 60,
+            'match_id' => $catId,
+            'newest' => $offset,
+            'order' => 'desc',
+            'page_type' => 'search',
+            'scenario' => 'PAGE_CATEGORY',
+            'version' => 2,
+        ]);
+
+        $body = $this->httpGet($url, [
+            'Referer: https://shopee.vn/',
+            'Accept: application/json',
+            'X-Shopee-Language: vi',
+            'X-API-SOURCE: pc',
+        ]);
+
+        $data = json_decode($body, true);
+        $items = $data['items'] ?? [];
+
+        $catName = self::SHOPEE_CATEGORIES[$catId] ?? 'Unknown';
+        $products = [];
+        foreach ($items as $item) {
+            $parsed = $this->parseShopeeItem($item['item_basic'] ?? $item, "Shopee [{$catName}]");
+            if ($parsed) $products[] = $parsed;
+        }
+        return $products;
+    }
+
+    /**
+     * Parse 1 item Shopee thành mảng chuẩn.
+     */
+    private function parseShopeeItem(array $info, string $source = 'Shopee'): ?array
+    {
+        $shopId = (int)($info['shopid'] ?? 0);
+        $itemId = (int)($info['itemid'] ?? 0);
+        if ($itemId === 0) return null;
+
+        return [
+            'source_product_id' => "SH-{$shopId}-{$itemId}",
+            'product_name' => $info['name'] ?? 'N/A',
+            'product_url' => "https://shopee.vn/product/{$shopId}/{$itemId}",
+            'price' => (float)($info['price'] ?? 0) / 100000,
+            'sold_count' => (int)($info['sold'] ?? $info['historical_sold'] ?? 0),
+            'notes' => $source,
+        ];
+    }
+
+    // ─── Keyword Search Scrapers ──────────────────────
 
     private function scrapeSearchPage(string $platform, string $keyword, int $page, string $sortBy): array
     {
@@ -438,6 +660,22 @@ final class ScraperService
     }
 
     // ─── Helpers ──────────────────────────────────────
+
+    private function updateLastRun(int $configId, array $all, array $filtered, array $syncResult, array $errors): void
+    {
+        $stmt = $this->pdo->prepare(
+            'UPDATE scraper_configs SET last_run_at = NOW(), last_run_result = :res, updated_at = NOW()
+             WHERE id = :id AND site_id = :sid'
+        );
+        $resultJson = json_encode([
+            'scraped' => count($all),
+            'filtered' => count($filtered),
+            'synced_new' => $syncResult['summary']['inserted_count'],
+            'synced_updated' => $syncResult['summary']['updated_count'],
+            'errors' => $errors,
+        ], JSON_UNESCAPED_UNICODE);
+        $stmt->execute([':res' => $resultJson, ':id' => $configId, ':sid' => APP_SITE_ID]);
+    }
 
     private function sanitizePlatform(string $platform): string
     {

@@ -182,6 +182,17 @@ if ($method === 'POST') {
                 json_response(true, 'Đã chạy ' . count($results) . ' cấu hình, đồng bộ tổng ' . $totalSynced . ' SP.');
                 break;
 
+            case '/scraper/trending':
+                $platform = trim((string)($_POST['platform'] ?? 'shopee'));
+                $minSold = max(0, (int)($_POST['min_sold_count'] ?? 100));
+                $maxPages = max(1, min(3, (int)($_POST['max_pages'] ?? 2)));
+                $categoryIds = array_map('intval', (array)($_POST['category_ids'] ?? []));
+                $result = $scraperService->scrapeTrending($platform, $categoryIds, $minSold, $maxPages);
+                $msg = "Đã cào {$result['scraped']} SP trending, lọc {$result['filtered']} SP bán chạy, đồng bộ {$result['synced']} SP.";
+                if (!empty($result['errors'])) $msg .= ' (' . count($result['errors']) . ' lỗi)';
+                json_response(true, $msg);
+                break;
+
             default:
                 $handled = false;
                 break;
@@ -274,6 +285,7 @@ switch ($path) {
             'scraperSummary'  => $scraperService->summary(),
             'productSummary'  => $productSyncService->dashboardSummary(),
             'configs'         => $scraperService->allConfigs(),
+            'categories'      => $scraperService->getCategories(),
             'topProducts'     => $productSyncService->topSellingProducts(10, 50),
         ]);
         break;
