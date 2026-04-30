@@ -7,6 +7,7 @@ require_once __DIR__ . '/ProductSyncService.php';
 require_once __DIR__ . '/AffiliateLinkService.php';
 require_once __DIR__ . '/TaskLogService.php';
 require_once __DIR__ . '/OpenAIContentProvider.php';
+require_once __DIR__ . '/GeminiContentProvider.php';
 
 final class ContentService
 {
@@ -15,6 +16,7 @@ final class ContentService
     private AffiliateLinkService $affiliateLinkService;
     private TaskLogService $taskLogService;
     private OpenAIContentProvider $openAIProvider;
+    private GeminiContentProvider $geminiProvider;
     private string $fileName = 'generated_contents.json';
 
     public function __construct()
@@ -24,6 +26,7 @@ final class ContentService
         $this->affiliateLinkService = new AffiliateLinkService();
         $this->taskLogService = new TaskLogService();
         $this->openAIProvider = new OpenAIContentProvider();
+        $this->geminiProvider = new GeminiContentProvider();
     }
 
     public function generateDraftForProduct(int $productId, string $provider = 'template_engine'): array
@@ -163,35 +166,59 @@ final class ContentService
     private function resolveProviderPayload(array $product, string $provider): array
     {
         $normalized = strtolower(trim($provider));
-        if ($normalized === 'openai') {
-            try {
-                $result = $this->openAIProvider->generate($product);
-                return [
-                    'title' => $result['title'] !== '' ? $result['title'] : ('Review nhanh: ' . $product['product_name']),
-                    'body' => $result['body'] !== '' ? $result['body'] : $this->buildTemplateBody($product),
-                    'hashtags' => $result['hashtags'] !== '' ? $result['hashtags'] : $this->buildTemplateHashtags($product),
-                    'call_to_action' => $result['call_to_action'] !== '' ? $result['call_to_action'] : 'Nhan vao link de xem chi tiet va gia moi nhat.',
-                    'notes' => $result['notes'] ?? 'Sinh boi OpenAI API',
-                    'provider_used' => 'openai',
-                ];
-            } catch (Throwable $throwable) {
-                return [
-                    'title' => 'Review nhanh: ' . $product['product_name'],
-                    'body' => $this->buildTemplateBody($product),
-                    'hashtags' => $this->buildTemplateHashtags($product),
-                    'call_to_action' => 'Nhan vao link de xem chi tiet va gia moi nhat.',
-                    'notes' => 'Fallback ve template_engine do OpenAI loi: ' . $throwable->getMessage(),
-                    'provider_used' => 'template_engine_fallback',
-                ];
+        if ($normalized === 'auto') {
+            foreach (['gemini', 'openai'] as $aiProvider) {
+                $payload = $this->tryAiProvider($product, $aiProvider);
+                if ($payload !== null) {
+                    return $payload;
+                }
             }
+            return $this->templatePayload($product, 'Fallback ve template_engine do chua co AI provider kha dung.');
         }
 
+        if (in_array($normalized, ['gemini', 'openai'], true)) {
+            $payload = $this->tryAiProvider($product, $normalized);
+            if ($payload !== null) {
+                return $payload;
+            }
+            return $this->templatePayload($product, 'Fallback ve template_engine do ' . strtoupper($normalized) . ' loi hoac chua cau hinh.');
+        }
+
+        return $this->templatePayload($product, 'Sinh boi template noi bo. Co the thay bang API AI that sau.');
+    }
+
+    private function tryAiProvider(array $product, string $provider): ?array
+    {
+        try {
+            $result = $provider === 'gemini'
+                ? $this->geminiProvider->generate($product)
+                : $this->openAIProvider->generate($product);
+
+            return [
+                'title' => $result['title'] !== '' ? $result['title'] : ('Review nhanh: ' . $product['product_name']),
+                'body' => $result['body'] !== '' ? $result['body'] : $this->buildTemplateBody($product),
+                'hashtags' => $result['hashtags'] !== '' ? $result['hashtags'] : $this->buildTemplateHashtags($product),
+                'call_to_action' => $result['call_to_action'] !== '' ? $result['call_to_action'] : 'Nhấn vào link để xem chi tiết và giá mới nhất.',
+                'notes' => $result['notes'] ?? ('Sinh boi ' . $provider . ' API'),
+                'provider_used' => $provider,
+            ];
+        } catch (Throwable $throwable) {
+            $this->taskLogService->create('ai_content_provider_failed', 'failed', [
+                'product_id' => (int)($product['id'] ?? 0),
+                'provider' => $provider,
+            ], [], $throwable->getMessage());
+            return null;
+        }
+    }
+
+    private function templatePayload(array $product, string $notes): array
+    {
         return [
             'title' => 'Review nhanh: ' . $product['product_name'],
             'body' => $this->buildTemplateBody($product),
             'hashtags' => $this->buildTemplateHashtags($product),
-            'call_to_action' => 'Nhan vao link de xem chi tiet va gia moi nhat.',
-            'notes' => 'Sinh boi template noi bo. Co the thay bang API AI that sau.',
+            'call_to_action' => 'Nhấn vào link để xem chi tiết và giá mới nhất.',
+            'notes' => $notes,
             'provider_used' => 'template_engine',
         ];
     }

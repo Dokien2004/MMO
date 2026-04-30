@@ -37,6 +37,8 @@ Dat bien moi truong truoc khi chay:
 ```bash
 export OPENAI_API_KEY="your_api_key"
 export OPENAI_MODEL="gpt-4o-mini"
+export GEMINI_API_KEY="..."
+export GEMINI_MODEL="gemini-1.5-flash"
 ```
 
 Neu `OPENAI_API_KEY` khong co hoac OpenAI loi, he thong tu dong fallback ve `template_engine`.
@@ -55,3 +57,8 @@ Neu chua co token/page id, hay dung channel `fanpage_manual` va thao tac `Mark p
 ## Cron
 
 Xem file `workers/cron.sample` de gan vao `crontab -e` tren laptop.
+
+
+## Gemini content provider
+
+Có thể chọn provider `gemini` hoặc `auto`. `auto` sẽ thử Gemini trước, sau đó OpenAI, cuối cùng fallback về template nội bộ nếu API lỗi hoặc thiếu key.

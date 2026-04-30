@@ -39,6 +39,8 @@ Xem `.env.example`. Bản hiện tại đọc trực tiếp từ environment:
 ```bash
 export OPENAI_API_KEY="..."
 export OPENAI_MODEL="gpt-4o-mini"
+export GEMINI_API_KEY="..."
+export GEMINI_MODEL="gemini-1.5-flash"
 export FACEBOOK_PAGE_ID="..."
 export FACEBOOK_PAGE_ACCESS_TOKEN="..."
 ```
@@ -87,3 +89,8 @@ systemctl status mmo-app
 ```
 
 `mmo-app` đã được cấu hình phụ thuộc `mariadb.service` để reboot xong DB chạy trước app.
+
+
+## Gemini content provider
+
+Có thể chọn provider `gemini` hoặc `auto`. `auto` sẽ thử Gemini trước, sau đó OpenAI, cuối cùng fallback về template nội bộ nếu API lỗi hoặc thiếu key.

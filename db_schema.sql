@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS automation_settings (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (site_id),
-    CONSTRAINT chk_settings_provider CHECK (default_content_provider IN ('template_engine', 'openai')),
+    CONSTRAINT chk_settings_provider CHECK (default_content_provider IN ('template_engine', 'openai', 'gemini', 'auto')),
     CONSTRAINT chk_settings_channel CHECK (default_channel IN ('fanpage_manual', 'fanpage_api')),
     CONSTRAINT chk_settings_sync_limit CHECK (sync_limit >= 1),
     CONSTRAINT chk_settings_min_sold_count CHECK (min_sold_count >= 0),

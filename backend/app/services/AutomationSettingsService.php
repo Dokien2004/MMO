@@ -98,8 +98,15 @@ SQL;
 
     public function integrationStatus(): array
     {
+        $openAiCompatibleRouterConfigured = openai_base_url() !== 'https://api.openai.com/v1';
+        $geminiViaRouterConfigured = $openAiCompatibleRouterConfigured && str_contains(strtolower(openai_model()), 'gemini');
+
         return [
-            'openai_configured' => openai_api_key() !== '',
+            'openai_configured' => openai_api_key() !== '' || $openAiCompatibleRouterConfigured,
+            'openai_router_configured' => $openAiCompatibleRouterConfigured,
+            'gemini_configured' => gemini_api_key() !== '' || $geminiViaRouterConfigured,
+            'gemini_direct_configured' => gemini_api_key() !== '',
+            'gemini_router_configured' => $geminiViaRouterConfigured,
             'facebook_page_id_configured' => facebook_page_id() !== '',
             'facebook_access_token_configured' => facebook_page_access_token() !== '',
             'fanpage_api_ready' => facebook_page_id() !== '' && facebook_page_access_token() !== '',
@@ -111,7 +118,7 @@ SQL;
         return [
             'site_id' => APP_SITE_ID,
             'default_campaign_code' => 'MVP-LAPTOP',
-            'default_content_provider' => 'template_engine',
+            'default_content_provider' => 'gemini',
             'default_channel' => 'fanpage_manual',
             'sync_limit' => 10,
             'min_sold_count' => 50,
@@ -127,7 +134,7 @@ SQL;
 
     private function sanitize(array $input, array $fallback): array
     {
-        $allowedProviders = ['template_engine', 'openai'];
+        $allowedProviders = ['template_engine', 'openai', 'gemini', 'auto'];
         $allowedChannels = ['fanpage_manual', 'fanpage_api'];
 
         return [
@@ -205,12 +212,28 @@ CREATE TABLE IF NOT EXISTS automation_settings (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (site_id),
-    CONSTRAINT chk_settings_provider CHECK (default_content_provider IN ('template_engine', 'openai')),
+    CONSTRAINT chk_settings_provider CHECK (default_content_provider IN ('template_engine', 'openai', 'gemini', 'auto')),
     CONSTRAINT chk_settings_channel CHECK (default_channel IN ('fanpage_manual', 'fanpage_api')),
     CONSTRAINT chk_settings_sync_limit CHECK (sync_limit >= 1),
     CONSTRAINT chk_settings_min_sold_count CHECK (min_sold_count >= 0),
     CONSTRAINT chk_settings_publish_interval CHECK (publish_interval_minutes >= 5)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);
+        $this->ensureProviderConstraintAllowsGemini();
+    }
+
+    private function ensureProviderConstraintAllowsGemini(): void
+    {
+        try {
+            $this->pdo->exec('ALTER TABLE automation_settings DROP CONSTRAINT chk_settings_provider');
+        } catch (Throwable) {
+            // Constraint may not exist or may already be compatible.
+        }
+
+        try {
+            $this->pdo->exec("ALTER TABLE automation_settings ADD CONSTRAINT chk_settings_provider CHECK (default_content_provider IN ('template_engine', 'openai', 'gemini', 'auto'))");
+        } catch (Throwable) {
+            // Ignore if DB already has an equivalent constraint.
+        }
     }
 }

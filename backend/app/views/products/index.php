@@ -60,6 +60,8 @@
                 <select class="form-control" name="provider">
                     <option value="template_engine">Mẫu có sẵn</option>
                     <option value="openai">OpenAI</option>
+                    <option value="gemini">Gemini</option>
+                    <option value="auto">Tự động fallback</option>
                 </select>
             </div>
             <div class="form-group">

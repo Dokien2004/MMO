@@ -10,6 +10,7 @@ $linkService = new AffiliateLinkService();
 $contentService = new ContentService();
 $postingService = new PostingService();
 $automationSettingsService = new AutomationSettingsService();
+$integrationConfigService = new IntegrationConfigService();
 
 // ── URL Parsing ──
 $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
@@ -148,6 +149,11 @@ if ($method === 'POST') {
                 json_response(true, 'Đã lưu cấu hình tự động hóa.', ['data' => $settings]);
                 break;
 
+            case '/settings/integrations':
+                $integrations = $integrationConfigService->save($_POST);
+                json_response(true, 'Đã lưu cấu hình API/tài khoản. Nếu vừa đổi key, reload trang để cập nhật trạng thái.', ['data' => array_keys($integrations)]);
+                break;
+
             default:
                 $handled = false;
                 break;
@@ -239,6 +245,7 @@ switch ($path) {
             'currentPage' => 'settings',
             'automationSettings' => $automationSettings,
             'integrationStatus' => $automationSettingsService->integrationStatus(),
+            'integrationConfig' => $integrationConfigService->masked(),
             'topSellingProducts' => $productSyncService->topSellingProducts(10, 0),
         ]);
         break;

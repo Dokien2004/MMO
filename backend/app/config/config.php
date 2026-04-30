@@ -16,18 +16,43 @@ const STORAGE_PATH = BASE_PATH . '/storage';
 const DATA_PATH = STORAGE_PATH . '/data';
 const LOG_PATH = STORAGE_PATH . '/logs';
 
-const OPENAI_API_KEY = '';
-const OPENAI_MODEL = 'gpt-4o-mini';
-const OPENAI_TIMEOUT_SECONDS = 45;
-
-const FACEBOOK_PAGE_ID = '';
-const FACEBOOK_PAGE_ACCESS_TOKEN = '';
-const FACEBOOK_GRAPH_VERSION = 'v23.0';
-const FACEBOOK_TIMEOUT_SECONDS = 45;
-
 $localConfig = __DIR__ . '/local.php';
 if (file_exists($localConfig)) {
     require_once $localConfig;
+}
+
+if (!defined('OPENAI_API_KEY')) {
+    define('OPENAI_API_KEY', '');
+}
+if (!defined('OPENAI_MODEL')) {
+    define('OPENAI_MODEL', 'gpt-4o-mini');
+}
+if (!defined('OPENAI_BASE_URL')) {
+    define('OPENAI_BASE_URL', 'https://api.openai.com/v1');
+}
+if (!defined('OPENAI_TIMEOUT_SECONDS')) {
+    define('OPENAI_TIMEOUT_SECONDS', 45);
+}
+if (!defined('GEMINI_API_KEY')) {
+    define('GEMINI_API_KEY', '');
+}
+if (!defined('GEMINI_MODEL')) {
+    define('GEMINI_MODEL', 'gemini-1.5-flash');
+}
+if (!defined('GEMINI_TIMEOUT_SECONDS')) {
+    define('GEMINI_TIMEOUT_SECONDS', 45);
+}
+if (!defined('FACEBOOK_PAGE_ID')) {
+    define('FACEBOOK_PAGE_ID', '');
+}
+if (!defined('FACEBOOK_PAGE_ACCESS_TOKEN')) {
+    define('FACEBOOK_PAGE_ACCESS_TOKEN', '');
+}
+if (!defined('FACEBOOK_GRAPH_VERSION')) {
+    define('FACEBOOK_GRAPH_VERSION', 'v23.0');
+}
+if (!defined('FACEBOOK_TIMEOUT_SECONDS')) {
+    define('FACEBOOK_TIMEOUT_SECONDS', 45);
 }
 
 if (!defined('DB_HOST')) {
@@ -74,6 +99,24 @@ function openai_model(): string
 {
     $fromEnv = app_env('OPENAI_MODEL', '');
     return $fromEnv !== '' ? $fromEnv : OPENAI_MODEL;
+}
+
+function openai_base_url(): string
+{
+    $fromEnv = app_env('OPENAI_BASE_URL', '');
+    return rtrim($fromEnv !== '' ? $fromEnv : OPENAI_BASE_URL, '/');
+}
+
+function gemini_api_key(): string
+{
+    $fromEnv = app_env('GEMINI_API_KEY', '');
+    return $fromEnv !== '' ? $fromEnv : GEMINI_API_KEY;
+}
+
+function gemini_model(): string
+{
+    $fromEnv = app_env('GEMINI_MODEL', '');
+    return $fromEnv !== '' ? $fromEnv : GEMINI_MODEL;
 }
 
 function facebook_page_id(): string
