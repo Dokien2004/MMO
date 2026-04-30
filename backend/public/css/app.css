@@ -516,6 +516,17 @@ select.form-control { cursor: pointer; }
 .flex-wrap { flex-wrap: wrap; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; display: inline-block; }
 
+/* ═══════ SCRAPER / PLATFORM BADGES ═══════ */
+.badge-shopee { background: rgba(238,77,45,0.14); color: #ee4d2d; }
+.badge-tiktokshop { background: rgba(0,0,0,0.12); color: #e2e8f0; border: 1px solid rgba(255,255,255,0.1); }
+.badge-lazada { background: rgba(13,0,178,0.14); color: #8b8cff; }
+
+.metric-pill.hot {
+    background: linear-gradient(135deg, rgba(239,68,68,0.18), rgba(245,158,11,0.18));
+    border-color: rgba(239,68,68,0.25);
+    color: #f87171;
+}
+
 /* ═══════ RESPONSIVE ═══════ */
 @media (max-width: 1100px) {
     .grid-2, .grid-3, .grid-12 { grid-template-columns: 1fr; }

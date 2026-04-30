@@ -20,9 +20,11 @@
 | Cron sample | Done | `workers/cron.sample` |
 | Site context | Done | Mac dinh `site_id = 1` cho single-laptop MVP |
 | Fanpage API integration | Done | Ho tro `fanpage_api` va fallback `fanpage_manual` |
+| Scraper module | Done | Cao du lieu SP ban chay tu Shopee/TikTok/Lazada, luu DB, UI quan ly |
 
 ## Tuan hien tai
 
 - Muc tieu: co flow dong bo san pham -> tao link -> tao draft -> duyet -> schedule dang bai tren laptop
-- Da xong: dashboard MVP, local file storage, task logs, link generation, content draft, approve/reject, posting schedule, worker scripts, cron mau, site_id, OpenAI provider fallback, Fanpage API integration
-- Tiep theo: bo sung env file, retry policy, va tach dashboard thanh cac route/view rieng
+- Da xong: dashboard MVP, local file storage, task logs, link generation, content draft, approve/reject, posting schedule, worker scripts, cron mau, site_id, OpenAI provider fallback, Fanpage API integration, scraper module (cao SP ban chay)
+- Tiep theo: bo sung env file, retry policy, proxy rotation cho scraper, va tach dashboard thanh cac route/view rieng
+

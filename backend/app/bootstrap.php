@@ -17,3 +17,4 @@ require_once __DIR__ . '/services/GeminiContentProvider.php';
 require_once __DIR__ . '/services/FacebookPagePublisher.php';
 require_once __DIR__ . '/services/ContentService.php';
 require_once __DIR__ . '/services/PostingService.php';
+require_once __DIR__ . '/services/ScraperService.php';

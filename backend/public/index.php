@@ -11,6 +11,7 @@ $contentService = new ContentService();
 $postingService = new PostingService();
 $automationSettingsService = new AutomationSettingsService();
 $integrationConfigService = new IntegrationConfigService();
+$scraperService = new ScraperService();
 
 // ── URL Parsing ──
 $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
@@ -154,6 +155,33 @@ if ($method === 'POST') {
                 json_response(true, 'Đã lưu cấu hình API/tài khoản. Nếu vừa đổi key, reload trang để cập nhật trạng thái.', ['data' => array_keys($integrations)]);
                 break;
 
+            // ── Scraper actions ──
+            case '/scraper/save-config':
+                $configId = $scraperService->saveConfig($_POST);
+                json_response(true, 'Đã lưu cấu hình cào #' . $configId . '.');
+                break;
+
+            case '/scraper/delete-config':
+                $configId = (int)($_POST['config_id'] ?? 0);
+                $scraperService->deleteConfig($configId);
+                json_response(true, 'Đã xóa cấu hình #' . $configId . '.');
+                break;
+
+            case '/scraper/run':
+                $configId = (int)($_POST['config_id'] ?? 0);
+                $result = $scraperService->runScrapeJob($configId);
+                $msg = "Đã cào {$result['scraped']} SP, lọc {$result['filtered']} SP bán chạy, đồng bộ {$result['synced']} SP.";
+                if (!empty($result['errors'])) $msg .= ' (' . count($result['errors']) . ' lỗi)';
+                json_response(true, $msg);
+                break;
+
+            case '/scraper/run-all':
+                $results = $scraperService->runAllActive();
+                $totalSynced = 0;
+                foreach ($results as $r) $totalSynced += ($r['result']['synced'] ?? 0);
+                json_response(true, 'Đã chạy ' . count($results) . ' cấu hình, đồng bộ tổng ' . $totalSynced . ' SP.');
+                break;
+
             default:
                 $handled = false;
                 break;
@@ -236,6 +264,17 @@ switch ($path) {
             'pageTitle'   => 'Nhật ký',
             'currentPage' => 'logs',
             'logs'        => $taskLogService->recent(50),
+        ]);
+        break;
+
+    case '/scraper':
+        render('scraper/index', [
+            'pageTitle'       => 'Cào dữ liệu',
+            'currentPage'     => 'scraper',
+            'scraperSummary'  => $scraperService->summary(),
+            'productSummary'  => $productSyncService->dashboardSummary(),
+            'configs'         => $scraperService->allConfigs(),
+            'topProducts'     => $productSyncService->topSellingProducts(10, 50),
         ]);
         break;
 

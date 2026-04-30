@@ -5,6 +5,9 @@
 # Publish cac bai scheduled theo Fanpage API moi 15 phut
 */15 * * * * /usr/bin/php /opt/lampp/htdocs/affiliate-mvp-laptop/workers/publish_scheduled_posts.php 10 >> /opt/lampp/htdocs/affiliate-mvp-laptop/storage/logs/publish.log 2>&1
 
+# Cao du lieu san pham ban chay tu Shopee/TikTok moi 6 gio
+0 */6 * * * /usr/bin/php /opt/lampp/htdocs/affiliate-mvp-laptop/workers/run_scraper.php >> /opt/lampp/htdocs/affiliate-mvp-laptop/storage/logs/scraper.log 2>&1
+
 # Hoac chay tung buoc rieng neu can debug
 # 0 */6 * * * /usr/bin/php /opt/lampp/htdocs/affiliate-mvp-laptop/workers/sync_sample_products.php affiliate_api /opt/lampp/htdocs/affiliate-mvp-laptop/storage/data/sources/sample_products.json >> /opt/lampp/htdocs/affiliate-mvp-laptop/storage/logs/sync.log 2>&1
 # 10 */6 * * * /usr/bin/php /opt/lampp/htdocs/affiliate-mvp-laptop/workers/generate_links.php MVP-LAPTOP 10 >> /opt/lampp/htdocs/affiliate-mvp-laptop/storage/logs/links.log 2>&1
