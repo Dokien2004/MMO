@@ -35,6 +35,10 @@ final class ScraperService
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     ];
 
+    private string $cookieFile;
+    private bool $shopeeSessionBootstrapped = false;
+    private string $browserScriptPath;
+
     /** Danh mục Shopee phổ biến (catid) để cào trending */
     public const SHOPEE_CATEGORIES = [
         11036132 => 'Điện tử',
@@ -58,6 +62,8 @@ final class ScraperService
         $this->productSyncService = new ProductSyncService();
         $this->taskLogService = new TaskLogService();
         $this->pdo = db_pdo();
+        $this->cookieFile = sys_get_temp_dir() . '/mmo_scraper_cookies.txt';
+        $this->browserScriptPath = BASE_PATH . '/scripts/shopee_browser_scraper.js';
         $this->ensureConfigTable();
     }
 
@@ -365,6 +371,29 @@ final class ScraperService
      */
     private function scrapeShopeeDiscover(int $maxPages = 2): array
     {
+        $jobs = [];
+        for ($page = 0; $page < $maxPages; $page++) {
+            $jobs[] = ['type' => 'discover', 'page' => $page];
+        }
+
+        $browserResults = $this->runShopeeBrowserJobs($jobs);
+        $products = [];
+        $errors = [];
+        foreach ($browserResults as $result) {
+            if (!empty($result['error'])) {
+                $errors[] = (string)$result['error'];
+                continue;
+            }
+            $products = array_merge($products, $result['products'] ?? []);
+        }
+
+        if (!empty($products)) {
+            return $products;
+        }
+        if (!empty($errors)) {
+            throw new RuntimeException($errors[0]);
+        }
+
         $products = [];
         for ($page = 0; $page < $maxPages; $page++) {
             $offset = $page * 60;
@@ -402,6 +431,20 @@ final class ScraperService
      */
     private function scrapeShopeeCategory(int $catId, int $page = 1): array
     {
+        $browserResults = $this->runShopeeBrowserJobs([[
+            'type' => 'category',
+            'categoryId' => $catId,
+            'categoryName' => self::SHOPEE_CATEGORIES[$catId] ?? "Cat#{$catId}",
+            'page' => $page,
+        ]]);
+        $browserResult = $browserResults[0] ?? null;
+        if (is_array($browserResult) && empty($browserResult['error'])) {
+            return $browserResult['products'] ?? [];
+        }
+        if (is_array($browserResult) && !empty($browserResult['error'])) {
+            throw new RuntimeException((string)$browserResult['error']);
+        }
+
         $offset = ($page - 1) * 60;
         $url = 'https://shopee.vn/api/v4/search/search_items?' . http_build_query([
             'by' => 'sold',
@@ -466,6 +509,20 @@ final class ScraperService
 
     private function scrapeShopee(string $keyword, int $page, string $sortBy): array
     {
+        $browserResults = $this->runShopeeBrowserJobs([[
+            'type' => 'search',
+            'keyword' => $keyword,
+            'page' => $page,
+            'sortBy' => $sortBy,
+        ]]);
+        $browserResult = $browserResults[0] ?? null;
+        if (is_array($browserResult) && empty($browserResult['error'])) {
+            return $browserResult['products'] ?? [];
+        }
+        if (is_array($browserResult) && !empty($browserResult['error'])) {
+            throw new RuntimeException((string)$browserResult['error']);
+        }
+
         $offset = ($page - 1) * 60;
         $sortMap = [
             'sold' => 'sold', 'price_asc' => 'price', 'price_desc' => 'price',
@@ -606,13 +663,15 @@ final class ScraperService
     private function httpGet(string $url, array $headers = []): string
     {
         $userAgent = $this->userAgents[array_rand($this->userAgents)];
-        $allHeaders = array_merge([
-            'User-Agent: ' . $userAgent,
-            'Accept-Language: vi-VN,vi;q=0.9,en;q=0.8',
-        ], $headers);
+        $host = (string)parse_url($url, PHP_URL_HOST);
+        $allHeaders = array_merge($this->buildDefaultHeaders($url, $userAgent), $headers);
 
         $lastError = '';
         for ($attempt = 1; $attempt <= $this->maxRetries; $attempt++) {
+            if (str_contains($host, 'shopee.vn')) {
+                $this->bootstrapShopeeSession($userAgent);
+            }
+
             $ch = curl_init();
             curl_setopt_array($ch, [
                 CURLOPT_URL => $url,
@@ -623,8 +682,9 @@ final class ScraperService
                 CURLOPT_HTTPHEADER => $allHeaders,
                 CURLOPT_SSL_VERIFYPEER => false,
                 CURLOPT_ENCODING => 'gzip, deflate',
-                CURLOPT_COOKIEJAR => sys_get_temp_dir() . '/scraper_cookies.txt',
-                CURLOPT_COOKIEFILE => sys_get_temp_dir() . '/scraper_cookies.txt',
+                CURLOPT_COOKIEJAR => $this->cookieFile,
+                CURLOPT_COOKIEFILE => $this->cookieFile,
+                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
             ]);
 
             $response = curl_exec($ch);
@@ -648,6 +708,10 @@ final class ScraperService
 
             if ($httpCode >= 400) {
                 $lastError = "HTTP {$httpCode}";
+                if ($httpCode === 403 && str_contains($host, 'shopee.vn')) {
+                    $this->shopeeSessionBootstrapped = false;
+                    $lastError .= ' (Shopee anti-bot blocked this server-side request)';
+                }
                 error_log("[SCRAPER] Attempt {$attempt}: {$lastError}");
                 usleep(1_000_000 * $attempt);
                 continue;
@@ -656,7 +720,156 @@ final class ScraperService
             return (string)$response;
         }
 
+        if ($lastError !== '' && str_contains($host, 'shopee.vn') && str_contains($lastError, 'HTTP 403')) {
+            throw new RuntimeException(
+                "Scraper request failed after {$this->maxRetries} attempts: {$lastError}. " .
+                'Shopee is blocking direct cURL access to api/v4. Try residential proxy/cookie seeding or switch to browser automation.'
+            );
+        }
+
         throw new RuntimeException("Scraper request failed after {$this->maxRetries} attempts: {$lastError}");
+    }
+
+    private function buildDefaultHeaders(string $url, string $userAgent): array
+    {
+        $host = (string)parse_url($url, PHP_URL_HOST);
+        $origin = str_starts_with($host, 'www.') ? "https://{$host}" : 'https://www.' . $host;
+        $referer = $origin . '/';
+
+        if (str_contains($host, 'shopee.vn')) {
+            $origin = 'https://shopee.vn';
+            $referer = 'https://shopee.vn/';
+        } elseif (str_contains($host, 'tiktok.com')) {
+            $origin = 'https://www.tiktok.com';
+            $referer = 'https://www.tiktok.com/';
+        } elseif (str_contains($host, 'lazada.vn')) {
+            $origin = 'https://www.lazada.vn';
+            $referer = 'https://www.lazada.vn/';
+        }
+
+        return [
+            'User-Agent: ' . $userAgent,
+            'Accept-Language: vi-VN,vi;q=0.9,en;q=0.8',
+            'Accept: application/json, text/plain, */*',
+            'Cache-Control: no-cache',
+            'Pragma: no-cache',
+            'Origin: ' . $origin,
+            'Referer: ' . $referer,
+            'Sec-Fetch-Dest: empty',
+            'Sec-Fetch-Mode: cors',
+            'Sec-Fetch-Site: same-origin',
+        ];
+    }
+
+    private function bootstrapShopeeSession(string $userAgent): void
+    {
+        if ($this->shopeeSessionBootstrapped) {
+            return;
+        }
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => 'https://shopee.vn/',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_TIMEOUT => 20,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_HTTPHEADER => [
+                'User-Agent: ' . $userAgent,
+                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language: vi-VN,vi;q=0.9,en;q=0.8',
+                'Cache-Control: no-cache',
+                'Pragma: no-cache',
+                'Upgrade-Insecure-Requests: 1',
+            ],
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_ENCODING => 'gzip, deflate',
+            CURLOPT_COOKIEJAR => $this->cookieFile,
+            CURLOPT_COOKIEFILE => $this->cookieFile,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+        ]);
+
+        curl_exec($ch);
+        curl_close($ch);
+        $this->shopeeSessionBootstrapped = true;
+    }
+
+    private function runShopeeBrowserJobs(array $jobs): array
+    {
+        if (!file_exists($this->browserScriptPath)) {
+            return [];
+        }
+
+        if (!function_exists('proc_open')) {
+            return [];
+        }
+
+        $nodeBinary = $this->findNodeBinary();
+        $payload = json_encode([
+            'jobs' => array_values($jobs),
+            'userDataDir' => STORAGE_PATH . '/browser/shopee-profile',
+        ], JSON_UNESCAPED_UNICODE);
+
+        if ($payload === false) {
+            return [];
+        }
+
+        $descriptorSpec = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+
+        $process = proc_open(
+            [$nodeBinary, $this->browserScriptPath, $payload],
+            $descriptorSpec,
+            $pipes,
+            BASE_PATH,
+            null,
+            ['bypass_shell' => true]
+        );
+
+        if (!is_resource($process)) {
+            return [];
+        }
+
+        fclose($pipes[0]);
+        $stdout = stream_get_contents($pipes[1]);
+        fclose($pipes[1]);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[2]);
+
+        $exitCode = proc_close($process);
+        if ($exitCode !== 0) {
+            throw new RuntimeException(trim($stderr) !== '' ? trim($stderr) : 'Browser scraper process failed');
+        }
+
+        $decoded = json_decode((string)$stdout, true);
+        if (!is_array($decoded) || !isset($decoded['results']) || !is_array($decoded['results'])) {
+            throw new RuntimeException('Browser scraper returned invalid JSON payload');
+        }
+
+        return $decoded['results'];
+    }
+
+    private function findNodeBinary(): string
+    {
+        $candidates = [
+            getenv('NODE_BINARY') ?: null,
+            'C:\\Program Files\\nodejs\\node.exe',
+            'node',
+        ];
+
+        foreach ($candidates as $candidate) {
+            if ($candidate === null || $candidate === '') {
+                continue;
+            }
+            if ($candidate === 'node' || file_exists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return 'node';
     }
 
     // ─── Helpers ──────────────────────────────────────
