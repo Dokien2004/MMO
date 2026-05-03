@@ -207,7 +207,7 @@ final class ScraperService
             'scraped' => count($allProducts),
             'filtered' => count($filtered),
             'synced' => $syncResult['summary']['inserted_count'] + $syncResult['summary']['updated_count'],
-        ], implode('; ', $errors) ?: null);
+        ], implode('; ', $errors));
 
         return [
             'scraped' => count($allProducts),
@@ -246,7 +246,7 @@ final class ScraperService
             'scraped' => count($allProducts),
             'filtered' => count($filtered),
             'synced' => $syncResult['summary']['inserted_count'] + $syncResult['summary']['updated_count'],
-        ], implode('; ', $errors) ?: null);
+        ], implode('; ', $errors));
 
         return [
             'scraped' => count($allProducts),
@@ -808,6 +808,7 @@ final class ScraperService
         $payload = json_encode([
             'jobs' => array_values($jobs),
             'userDataDir' => STORAGE_PATH . '/browser/shopee-profile',
+            'headless' => getenv('SHOPEE_BROWSER_HEADLESS') !== '0',
         ], JSON_UNESCAPED_UNICODE);
 
         if ($payload === false) {

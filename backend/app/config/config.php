@@ -70,6 +70,9 @@ if (!defined('DB_USERNAME')) {
 if (!defined('DB_PASSWORD')) {
     define('DB_PASSWORD', '');
 }
+if (!defined('PRODUCT_IMPORT_TOKEN')) {
+    define('PRODUCT_IMPORT_TOKEN', '');
+}
 
 
 if (!is_dir(DATA_PATH)) {
@@ -129,6 +132,12 @@ function facebook_page_access_token(): string
 {
     $fromEnv = app_env('FACEBOOK_PAGE_ACCESS_TOKEN', '');
     return $fromEnv !== '' ? $fromEnv : FACEBOOK_PAGE_ACCESS_TOKEN;
+}
+
+function product_import_token(): string
+{
+    $fromEnv = app_env('PRODUCT_IMPORT_TOKEN', '');
+    return $fromEnv !== '' ? $fromEnv : PRODUCT_IMPORT_TOKEN;
 }
 
 function db_pdo(): PDO

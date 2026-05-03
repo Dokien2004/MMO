@@ -40,6 +40,41 @@ if ($path === '/api/products') {
     exit;
 }
 
+if ($path === '/api/products/import' && $method === 'POST') {
+    header('Content-Type: application/json');
+
+    $expectedToken = product_import_token();
+    $providedToken = $_SERVER['HTTP_X_IMPORT_TOKEN'] ?? ($_POST['import_token'] ?? '');
+    if ($expectedToken === '' || !hash_equals($expectedToken, (string)$providedToken)) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'message' => 'Unauthorized import token.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    try {
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+        if (str_contains($contentType, 'application/json')) {
+            $payload = json_decode((string)file_get_contents('php://input'), true, 512, JSON_THROW_ON_ERROR);
+            $platform = trim((string)($payload['platform'] ?? 'shopee'));
+            $products = $payload['products'] ?? $payload;
+        } else {
+            $platform = trim((string)($_POST['platform'] ?? 'shopee'));
+            $products = json_decode(trim((string)($_POST['products_json'] ?? '')), true, 512, JSON_THROW_ON_ERROR);
+        }
+
+        if (!is_array($products)) {
+            throw new InvalidArgumentException('Payload phải là mảng JSON hoặc object có key products.');
+        }
+
+        $result = $productSyncService->syncBatch($platform !== '' ? $platform : 'shopee', array_values($products));
+        echo json_encode(['success' => true, 'message' => 'Imported products.', 'data' => $result['summary']], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $throwable) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => $throwable->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
+    exit;
+}
+
 if ($path === '/api/links') {
     header('Content-Type: application/json');
     echo json_encode(['success' => true, 'data' => $linkService->allLinks()], JSON_UNESCAPED_UNICODE);

@@ -28,6 +28,11 @@ async function getFreePort() {
 function findChromePath() {
   const candidates = [
     process.env.CHROME_PATH,
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/snap/bin/chromium',
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
@@ -181,7 +186,8 @@ async function evaluate(client, expression) {
   });
 
   if (result.exceptionDetails) {
-    throw new Error(result.exceptionDetails.text || 'Runtime evaluation failed');
+    const details = result.exceptionDetails.exception || {};
+    throw new Error(details.description || details.value || result.exceptionDetails.text || 'Runtime evaluation failed');
   }
 
   return result.result ? result.result.value : null;
@@ -299,20 +305,139 @@ function parseProducts(job, payload) {
     return products;
   }
 
-  const items = payload.items || payload.item_basic || [];
   const source =
     job.type === 'category'
       ? `Shopee [${job.categoryName || `Cat#${job.categoryId}`}]`
       : 'Scraped from Shopee search';
 
-  for (const item of items) {
-    const parsed = normalizeShopeeItem(item.item_basic || item, source);
-    if (parsed) {
-      products.push(parsed);
+  const candidateLists = [
+    payload.items,
+    payload.item_basic,
+    (((payload || {}).data || {}).items),
+    (((payload || {}).data || {}).item_basic),
+    (((payload || {}).data || {}).sections || []).flatMap((section) => ((((section || {}).data || {}).item) || [])),
+  ].filter(Array.isArray);
+
+  for (const items of candidateLists) {
+    for (const item of items) {
+      const parsed = normalizeShopeeItem(item.item_basic || item, source);
+      if (parsed) {
+        products.push(parsed);
+      }
     }
   }
 
-  return products;
+  return dedupeProducts(products);
+}
+
+function dedupeProducts(products) {
+  const byId = new Map();
+  for (const product of products) {
+    if (!product || !product.source_product_id) {
+      continue;
+    }
+    byId.set(product.source_product_id, product);
+  }
+  return [...byId.values()];
+}
+
+function isRelevantShopeeApi(url) {
+  return /shopee\.vn\/api\/v4\//.test(url) &&
+    /(search_items|recommend|daily_discover|item|get_pc)/.test(url);
+}
+
+async function collectNetworkProducts(client, job, action, waitMs = 7000) {
+  const pending = new Map();
+  const products = [];
+  const errors = [];
+
+  client.on('Network.responseReceived', (params) => {
+    const response = params.response || {};
+    const url = response.url || '';
+    if (!isRelevantShopeeApi(url)) {
+      return;
+    }
+    pending.set(params.requestId, { url, status: response.status });
+  });
+
+  client.on('Network.loadingFinished', (params) => {
+    const meta = pending.get(params.requestId);
+    if (!meta) {
+      return;
+    }
+    pending.delete(params.requestId);
+    client.send('Network.getResponseBody', { requestId: params.requestId })
+      .then((bodyResult) => {
+        if (meta.status >= 400) {
+          errors.push(`${meta.url}: HTTP ${meta.status}`);
+          return;
+        }
+        const text = bodyResult.base64Encoded
+          ? Buffer.from(bodyResult.body || '', 'base64').toString('utf8')
+          : (bodyResult.body || '');
+        if (!text.trim().startsWith('{')) {
+          return;
+        }
+        const parsed = parseProducts(job, JSON.parse(text));
+        products.push(...parsed);
+      })
+      .catch((error) => errors.push(`${meta.url}: ${error.message}`));
+  });
+
+  await action();
+  await sleep(waitMs);
+
+  return { products: dedupeProducts(products), errors };
+}
+
+function buildDomExtractionExpression(job) {
+  const source = JSON.stringify(
+    job.type === 'category'
+      ? `Shopee [${job.categoryName || `Cat#${job.categoryId}`}]`
+      : 'Scraped from Shopee browser DOM'
+  );
+
+  return `
+    (() => {
+      const parseSold = (text) => {
+        const source = String(text || '').toLowerCase().replace(/,/g, '.');
+        const match = source.match(/(?:đã bán|sold)\\s*([0-9]+(?:\\.[0-9]+)?)(k|nghìn|tr|m)?/i);
+        if (!match) return 0;
+        let value = Number(match[1] || 0);
+        const unit = match[2] || '';
+        if (unit === 'k' || unit === 'nghìn') value *= 1000;
+        if (unit === 'tr' || unit === 'm') value *= 1000000;
+        return Math.round(value);
+      };
+      const parsePrice = (text) => {
+        const match = String(text || '').replace(/\\s/g, '').match(/₫?([0-9.]+)/);
+        return match ? Number(match[1].replace(/\\./g, '')) : 0;
+      };
+      const links = [...document.querySelectorAll('a[href*="-i."], a[href*="/product/"]')];
+      const products = [];
+      for (const link of links) {
+        const href = link.href || '';
+        const itemMatch = href.match(new RegExp('-i\\\\.(\\\\d+)\\\\.(\\\\d+)')) || href.match(new RegExp('/product/(\\\\d+)/(\\\\d+)'));
+        const shopId = itemMatch ? itemMatch[1] : '';
+        const itemId = itemMatch ? itemMatch[2] : '';
+        if (!itemId) continue;
+        const text = link.innerText || link.closest('[data-sqe="item"]')?.innerText || '';
+        const lines = text.split('\\n').map((line) => line.trim()).filter(Boolean);
+        const name = lines.find((line) => !line.includes('₫') && !/đã bán|sold|%|yêu thích/i.test(line)) || 'N/A';
+        products.push({
+          source_product_id: 'SH-' + shopId + '-' + itemId,
+          product_name: name,
+          product_url: 'https://shopee.vn/product/' + shopId + '/' + itemId,
+          price: parsePrice(text),
+          sold_count: parseSold(text),
+          notes: ${source},
+        });
+      }
+      const byId = new Map();
+      for (const product of products) byId.set(product.source_product_id, product);
+      return [...byId.values()];
+    })()
+  `;
 }
 
 function buildFetchExpression(config) {
@@ -334,8 +459,34 @@ function buildFetchExpression(config) {
 
 async function runJob(client, waitForLoad, job) {
   const config = buildJobConfig(job);
-  await navigate(client, waitForLoad, config.pageUrl);
-  await sleep(2500);
+
+  const network = await collectNetworkProducts(client, job, async () => {
+    try {
+      await navigate(client, waitForLoad, config.pageUrl);
+    } catch (error) {
+      if (!String(error.message || '').includes('Timed out waiting for page load')) {
+        throw error;
+      }
+    }
+    await sleep(2500);
+    await evaluate(client, `window.scrollTo(0, Math.floor(document.body.scrollHeight * 0.45)); true`);
+    await sleep(1200);
+    await evaluate(client, `window.scrollTo(0, document.body.scrollHeight); true`);
+  });
+
+  if (network.products.length > 0) {
+    return network.products;
+  }
+
+  const domProducts = await evaluate(client, buildDomExtractionExpression(job));
+  if (Array.isArray(domProducts) && domProducts.length > 0) {
+    return dedupeProducts(domProducts);
+  }
+
+  const trafficState = await evaluate(client, `({ href: location.href, title: document.title, text: document.body.innerText.slice(0, 300) })`);
+  if (trafficState && String(trafficState.href || '').includes('/verify/traffic/error')) {
+    throw new Error('Shopee traffic verification blocked the browser session. Login/refresh cookies in a real browser profile or use a stable residential proxy. Page text: ' + String(trafficState.text || '').replace(/\s+/g, ' ').slice(0, 220));
+  }
 
   const fetchResult = await evaluate(client, buildFetchExpression(config));
   if (!fetchResult || typeof fetchResult.status !== 'number') {
@@ -346,7 +497,15 @@ async function runJob(client, waitForLoad, job) {
   }
 
   const payload = JSON.parse(fetchResult.text);
-  return parseProducts(job, payload);
+  const products = parseProducts(job, payload);
+  if (products.length === 0 && process.env.SHOPEE_DEBUG === '1') {
+    const pageInfo = await evaluate(client, `({ title: document.title, href: location.href, text: document.body.innerText.slice(0, 1200), htmlLength: document.documentElement.outerHTML.length, linkCount: document.querySelectorAll('a').length })`);
+    throw new Error('No products found. Debug: ' + JSON.stringify({ pageInfo, networkErrors: network.errors }));
+  }
+  if (products.length === 0 && network.errors.length > 0) {
+    throw new Error(network.errors[0]);
+  }
+  return products;
 }
 
 async function main() {
@@ -363,9 +522,32 @@ async function main() {
 
   const chromePath = findChromePath();
   const port = await getFreePort();
-  const userDataDir =
+  let userDataDir =
     input.userDataDir ||
     path.join(process.cwd(), 'storage', 'browser', 'shopee-profile');
+
+  // Always use a disposable copy when a profile is supplied. Chromium creates
+  // many LOCK files under Default/* and stale locks can prevent CDP startup.
+  if (input.userDataDir) {
+    const sourceProfileDir = userDataDir;
+    userDataDir = path.join(os.tmpdir(), `mmo-shopee-profile-${process.pid}-${Date.now()}`);
+    if (fs.existsSync(sourceProfileDir)) {
+      fs.cpSync(sourceProfileDir, userDataDir, {
+        recursive: true,
+        force: true,
+        errorOnExist: false,
+        filter: (source) => !/^(Singleton(?:Cookie|Lock|Socket)|LOCK)$/.test(path.basename(source)),
+      });
+    }
+  } else {
+    try {
+      fs.lstatSync(path.join(userDataDir, 'SingletonLock'));
+      userDataDir = path.join(os.tmpdir(), `mmo-shopee-profile-${process.pid}-${Date.now()}`);
+    } catch (_error) {
+      // No SingletonLock found; the configured profile can be used.
+    }
+  }
+
   fs.mkdirSync(userDataDir, { recursive: true });
 
   const chromeArgs = [
@@ -380,9 +562,15 @@ async function main() {
     '--disable-renderer-backgrounding',
     '--window-size=1365,900',
     '--lang=vi-VN',
-    '--headless=new',
-    'about:blank',
+    '--no-sandbox',
+    '--disable-dev-shm-usage',
   ];
+
+  if (input.headless !== false) {
+    chromeArgs.push('--headless=new');
+  }
+
+  chromeArgs.push('about:blank');
 
   const chrome = spawn(chromePath, chromeArgs, {
     stdio: 'ignore',
