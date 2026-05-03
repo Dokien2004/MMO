@@ -1,2 +1,3 @@
-2026/05/01-17:46:46.873 105c Creating DB C:\xampp\htdocs\MMO\storage\browser\shopee-profile\Default\shared_proto_db since it was missing.
-2026/05/01-17:46:46.881 105c Reusing MANIFEST C:\xampp\htdocs\MMO\storage\browser\shopee-profile\Default\shared_proto_db/MANIFEST-000001
+2026/05/01-17:47:07.778 50ac Reusing MANIFEST C:\xampp\htdocs\MMO\storage\browser\shopee-profile\Default\shared_proto_db/MANIFEST-000001
+2026/05/01-17:47:07.779 50ac Recovering log #3
+2026/05/01-17:47:07.780 50ac Reusing old log C:\xampp\htdocs\MMO\storage\browser\shopee-profile\Default\shared_proto_db/000003.log 
