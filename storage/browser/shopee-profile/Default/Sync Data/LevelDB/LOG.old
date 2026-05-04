@@ -1,3 +1,3 @@
-2026/05/01-17:47:07.653 45ac Reusing MANIFEST C:\xampp\htdocs\MMO\storage\browser\shopee-profile\Default\Sync Data\LevelDB/MANIFEST-000001
-2026/05/01-17:47:07.658 45ac Recovering log #3
-2026/05/01-17:47:07.663 45ac Reusing old log C:\xampp\htdocs\MMO\storage\browser\shopee-profile\Default\Sync Data\LevelDB/000003.log 
+2026/05/03-23:15:39.523 4b6d Reusing MANIFEST /opt/lampp/htdocs/affiliate-mvp-laptop/storage/browser/shopee-profile/Default/Sync Data/LevelDB/MANIFEST-000001
+2026/05/03-23:15:39.525 4b6d Recovering log #3
+2026/05/03-23:15:39.526 4b6d Reusing old log /opt/lampp/htdocs/affiliate-mvp-laptop/storage/browser/shopee-profile/Default/Sync Data/LevelDB/000003.log 

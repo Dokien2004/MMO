@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/ProductSyncService.php';
 require_once __DIR__ . '/TaskLogService.php';
+require_once __DIR__ . '/TikiScraperClient.php';
 
 /**
  * ScraperService — Cào dữ liệu sản phẩm bán chạy từ các sàn TMĐT.
@@ -12,6 +13,7 @@ require_once __DIR__ . '/TaskLogService.php';
  * - Shopee: search theo keyword, trending theo danh mục, daily discover
  * - TikTok Shop: search theo keyword
  * - Lazada: search theo keyword
+ * - Tiki: search theo keyword qua public products API
  *
  * Chế độ Trending: Cào top bán chạy KHÔNG cần nhập từ khóa.
  * Kết quả được đẩy vào ProductSyncService để lưu DB.
@@ -20,6 +22,7 @@ final class ScraperService
 {
     private ProductSyncService $productSyncService;
     private TaskLogService $taskLogService;
+    private TikiScraperClient $tikiScraperClient;
     private PDO $pdo;
 
     /** Rate limit: tối thiểu N giây giữa mỗi request */
@@ -61,6 +64,7 @@ final class ScraperService
     {
         $this->productSyncService = new ProductSyncService();
         $this->taskLogService = new TaskLogService();
+        $this->tikiScraperClient = new TikiScraperClient();
         $this->pdo = db_pdo();
         $this->cookieFile = sys_get_temp_dir() . '/mmo_scraper_cookies.txt';
         $this->browserScriptPath = BASE_PATH . '/scripts/shopee_browser_scraper.js';
@@ -219,7 +223,7 @@ final class ScraperService
 
     /**
      * Cào trending 1 lần (không cần config) — endpoint nhanh cho UI.
-     * @param string   $platform    shopee|tiktokshop|lazada
+     * @param string   $platform    shopee|tiktokshop|lazada|tiki
      * @param int[]    $categoryIds Danh mục Shopee catid (rỗng = tất cả)
      * @param int      $minSold     Ngưỡng lượt mua tối thiểu
      * @param int      $maxPages    Số trang mỗi danh mục
@@ -503,6 +507,7 @@ final class ScraperService
             'shopee' => $this->scrapeShopee($keyword, $page, $sortBy),
             'tiktokshop' => $this->scrapeTikTokShop($keyword, $page, $sortBy),
             'lazada' => $this->scrapeLazada($keyword, $page, $sortBy),
+            'tiki' => $this->scrapeTiki($keyword, $page, $sortBy),
             default => throw new InvalidArgumentException("Platform '{$platform}' chưa được hỗ trợ."),
         };
     }
@@ -658,6 +663,11 @@ final class ScraperService
         return $products;
     }
 
+    private function scrapeTiki(string $keyword, int $page, string $sortBy): array
+    {
+        return $this->tikiScraperClient->scrapeSearch($keyword, $page, $sortBy, 40);
+    }
+
     // ─── HTTP Client ──────────────────────────────────
 
     private function httpGet(string $url, array $headers = []): string
@@ -745,6 +755,9 @@ final class ScraperService
         } elseif (str_contains($host, 'lazada.vn')) {
             $origin = 'https://www.lazada.vn';
             $referer = 'https://www.lazada.vn/';
+        } elseif (str_contains($host, 'tiki.vn')) {
+            $origin = 'https://tiki.vn';
+            $referer = 'https://tiki.vn/';
         }
 
         return [
@@ -893,7 +906,7 @@ final class ScraperService
 
     private function sanitizePlatform(string $platform): string
     {
-        return in_array($platform, ['shopee', 'tiktokshop', 'lazada'], true) ? $platform : 'shopee';
+        return in_array($platform, ['shopee', 'tiktokshop', 'lazada', 'tiki'], true) ? $platform : 'shopee';
     }
 
     private function ensureConfigTable(): void

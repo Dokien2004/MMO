@@ -23,7 +23,8 @@
                 <div class="form-group">
                     <label class="form-label">Sàn TMĐT</label>
                     <select class="form-control" name="platform">
-                        <option value="shopee">Shopee (hỗ trợ tốt nhất)</option>
+                        <option value="tiki">Tiki (ổn định nhất)</option>
+                        <option value="shopee">Shopee</option>
                         <option value="tiktokshop">TikTok Shop</option>
                         <option value="lazada">Lazada</option>
                     </select>
@@ -71,6 +72,7 @@
                 <label class="form-label">Sàn TMĐT</label>
                 <select class="form-control" name="platform">
                     <option value="shopee">Shopee</option>
+                    <option value="tiki">Tiki</option>
                     <option value="tiktokshop">TikTok Shop</option>
                     <option value="lazada">Lazada</option>
                 </select>
@@ -158,7 +160,7 @@
                 <?php foreach ($configs as $config):
                     $result = json_decode($config['last_run_result'] ?? '{}', true);
                     $sortLabels = ['sold' => 'Bán chạy', 'relevance' => 'Liên quan', 'price_asc' => 'Giá ↑', 'price_desc' => 'Giá ↓'];
-                    $platformLabels = ['shopee' => 'Shopee', 'tiktokshop' => 'TikTok Shop', 'lazada' => 'Lazada'];
+                    $platformLabels = ['shopee' => 'Shopee', 'tiktokshop' => 'TikTok Shop', 'lazada' => 'Lazada', 'tiki' => 'Tiki'];
                 ?>
                     <tr>
                         <td>#<?= (int)$config['id'] ?></td>

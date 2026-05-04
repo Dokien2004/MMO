@@ -2,6 +2,12 @@
 .env.*
 !.env.example
 storage/logs/
+storage/browser/
+!storage/browser/.gitkeep
+storage/browser/playwright-profile/
+storage/data/captcha/
 backend/app/config/local.php
 .DS_Store
 Thumbs.db
+__pycache__/
+*.pyc

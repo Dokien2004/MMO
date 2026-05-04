@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const net = require('net');
+const WebSocketClient = globalThis.WebSocket || require('ws');
 
 const DEFAULT_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36';
@@ -79,7 +80,7 @@ class CdpClient {
 
   async connect() {
     await new Promise((resolve, reject) => {
-      const socket = new WebSocket(this.wsUrl);
+      const socket = new WebSocketClient(this.wsUrl);
       this.socket = socket;
 
       socket.onopen = () => resolve();

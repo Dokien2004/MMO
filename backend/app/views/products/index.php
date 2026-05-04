@@ -24,6 +24,7 @@
                 <select class="form-control" name="platform">
                     <option value="affiliate_api">Affiliate API</option>
                     <option value="shopee">Shopee</option>
+                    <option value="tiki">Tiki</option>
                     <option value="tiktokshop">TikTok Shop</option>
                     <option value="lazada">Lazada</option>
                     <option value="manual">Nhập tay</option>

@@ -6,6 +6,26 @@
 (function () {
     'use strict';
 
+    function getCsrfToken() {
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? (meta.getAttribute('content') || '') : '';
+    }
+
+    function requestJson(url, options) {
+        options = options || {};
+        options.headers = options.headers || {};
+        options.headers['X-Requested-With'] = 'XMLHttpRequest';
+
+        var csrfToken = getCsrfToken();
+        if (csrfToken && !options.headers['X-CSRF-Token']) {
+            options.headers['X-CSRF-Token'] = csrfToken;
+        }
+
+        return fetch(url, options).then(function (res) {
+            return res.json();
+        });
+    }
+
     /* ═══════ TOAST ═══════ */
     function showToast(message, type) {
         type = type || 'success';
@@ -41,11 +61,18 @@
         }
 
         var formData = new FormData(form);
+        var csrfToken = getCsrfToken();
+        if (csrfToken && !formData.has('csrf_token')) {
+            formData.append('csrf_token', csrfToken);
+        }
 
         fetch(form.action, {
             method: 'POST',
             body: formData,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-Token': csrfToken
+            }
         })
         .then(function (res) { return res.json(); })
         .then(function (data) {
@@ -114,5 +141,10 @@
     });
 
     /* Expose globally */
-    window.AffMVP = { showToast: showToast };
+    window.CSRF_TOKEN = getCsrfToken();
+    window.AffMVP = {
+        getCsrfToken: getCsrfToken,
+        requestJson: requestJson,
+        showToast: showToast
+    };
 })();

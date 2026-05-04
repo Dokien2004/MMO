@@ -211,7 +211,7 @@ final class ProductSyncService
 
     private function sanitizePlatform(string $platform): string
     {
-        $allowed = ['affiliate_api', 'shopee', 'tiktokshop', 'lazada', 'manual'];
+        $allowed = ['affiliate_api', 'shopee', 'tiktokshop', 'lazada', 'tiki', 'manual'];
         return in_array($platform, $allowed, true) ? $platform : 'affiliate_api';
     }
 

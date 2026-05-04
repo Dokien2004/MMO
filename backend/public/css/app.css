@@ -120,6 +120,53 @@ a:hover { color: var(--accent-light); }
     background: rgba(6,182,212,0.12); color: var(--accent);
 }
 
+.sidebar-user {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sidebar-user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #6366f1, #a855f7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    flex-shrink: 0;
+}
+
+.sidebar-user-meta {
+    flex: 1;
+    min-width: 0;
+}
+
+.sidebar-user-name {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-user-role {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.sidebar-logout {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 18px;
+    padding: 4px;
+}
+
 /* ═══════ MAIN ═══════ */
 .main {
     margin-left: var(--sidebar-w);
@@ -520,6 +567,7 @@ select.form-control { cursor: pointer; }
 .badge-shopee { background: rgba(238,77,45,0.14); color: #ee4d2d; }
 .badge-tiktokshop { background: rgba(0,0,0,0.12); color: #e2e8f0; border: 1px solid rgba(255,255,255,0.1); }
 .badge-lazada { background: rgba(13,0,178,0.14); color: #8b8cff; }
+.badge-tiki { background: rgba(26,148,255,0.14); color: #4dabff; }
 
 .metric-pill.hot {
     background: linear-gradient(135deg, rgba(239,68,68,0.18), rgba(245,158,11,0.18));
