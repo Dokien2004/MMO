@@ -212,7 +212,8 @@ function renderDeptFilterOptions($tree, $parentId = 0, $level = 0, $selectedId =
                                         </a>
                                         <?php if($user['id'] != $_SESSION['user_id']): ?>
                                             <button class="btn btn-sm btn-danger-sm" 
-                                                    onclick="openDeleteUserModal('<?php echo $user['id']; ?>', '<?php echo htmlspecialchars($user['full_name']); ?>')" title="Xóa tài khoản">
+                                                    type="button"
+                                                    onclick='openDeleteUserModal(<?php echo (int)$user["id"]; ?>, <?php echo json_encode((string)$user["full_name"], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT); ?>)' title="Xóa tài khoản">
                                                 <i class="fas fa-trash-alt"></i>
                                             </button>
                                         <?php endif; ?>

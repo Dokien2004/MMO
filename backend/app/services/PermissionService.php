@@ -9,6 +9,16 @@ declare(strict_types=1);
 class PermissionService
 {
     private PDO $pdo;
+    private const MODULE_MAP = [
+        'scraper' => 'SCRAPER',
+        'products' => 'PRODUCTS',
+        'links' => 'LINKS',
+        'contents' => 'CONTENTS',
+        'posts' => 'POSTS',
+        'settings' => 'SETTINGS',
+        'logs' => 'LOGS',
+        'admin' => 'ADMIN',
+    ];
 
     public function __construct()
     {
@@ -199,5 +209,176 @@ class PermissionService
             $this->pdo->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Sync configured permissions into database.
+     * Inserts new permissions, updates renamed ones, and removes stale entries.
+     */
+    public function syncPermissionsFromConfig(array $permissionsList): array
+    {
+        $normalizedPermissions = $this->normalizeConfiguredPermissions($permissionsList);
+
+        $this->pdo->beginTransaction();
+        try {
+            $inserted = 0;
+            $updated = 0;
+            $removed = 0;
+
+            $stmt = $this->pdo->query("SELECT id, code, name, module_code, sort_order FROM permissions ORDER BY id ASC");
+            $existingRows = $stmt->fetchAll();
+            $existingByCode = [];
+            foreach ($existingRows as $row) {
+                $existingByCode[$row['code']] = $row;
+            }
+
+            foreach ($normalizedPermissions as $permission) {
+                $existing = $existingByCode[$permission['code']] ?? null;
+
+                if ($existing === null) {
+                    $stmt = $this->pdo->prepare(
+                        "INSERT INTO permissions (code, name, module_code, sort_order)
+                         VALUES (:code, :name, :module_code, :sort_order)"
+                    );
+                    $stmt->execute([
+                        ':code' => $permission['code'],
+                        ':name' => $permission['name'],
+                        ':module_code' => $permission['module_code'],
+                        ':sort_order' => $permission['sort_order'],
+                    ]);
+                    $inserted++;
+                    continue;
+                }
+
+                $needsUpdate = $existing['name'] !== $permission['name']
+                    || (string)($existing['module_code'] ?? '') !== (string)$permission['module_code']
+                    || (int)($existing['sort_order'] ?? 99) !== $permission['sort_order'];
+
+                if ($needsUpdate) {
+                    $stmt = $this->pdo->prepare(
+                        "UPDATE permissions
+                         SET name = :name, module_code = :module_code, sort_order = :sort_order
+                         WHERE id = :id"
+                    );
+                    $stmt->execute([
+                        ':name' => $permission['name'],
+                        ':module_code' => $permission['module_code'],
+                        ':sort_order' => $permission['sort_order'],
+                        ':id' => (int)$existing['id'],
+                    ]);
+                    $updated++;
+                }
+            }
+
+            $validCodes = array_column($normalizedPermissions, 'code');
+            $stalePermissions = array_values(array_filter(
+                $existingRows,
+                static fn(array $row): bool => !in_array($row['code'], $validCodes, true)
+            ));
+
+            if ($stalePermissions !== []) {
+                $staleIds = array_map(static fn(array $row): int => (int)$row['id'], $stalePermissions);
+                $deletePlaceholders = implode(', ', array_fill(0, count($staleIds), '?'));
+
+                $stmt = $this->pdo->prepare(
+                    "DELETE FROM role_permissions WHERE permission_id IN ($deletePlaceholders)"
+                );
+                $stmt->execute($staleIds);
+
+                $stmt = $this->pdo->prepare(
+                    "DELETE FROM permissions WHERE id IN ($deletePlaceholders)"
+                );
+                $stmt->execute($staleIds);
+
+                $removed = count($staleIds);
+            }
+
+            $this->pdo->commit();
+            $this->reloadCurrentSessionPermissions();
+
+            if ($inserted === 0 && $updated === 0 && $removed === 0) {
+                return [
+                    'success' => true,
+                    'type' => 'info',
+                    'message' => 'Danh sách quyền đã đồng bộ và hiện không có thay đổi.',
+                    'inserted' => 0,
+                    'updated' => 0,
+                    'removed' => 0,
+                ];
+            }
+
+            return [
+                'success' => true,
+                'type' => 'success',
+                'message' => "Đã đồng bộ quyền. Thêm mới: {$inserted}, cập nhật: {$updated}, xóa thừa: {$removed}.",
+                'inserted' => $inserted,
+                'updated' => $updated,
+                'removed' => $removed,
+            ];
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * @return array<int, array{code: string, name: string, module_code: ?string, sort_order: int}>
+     */
+    private function normalizeConfiguredPermissions(array $permissionsList): array
+    {
+        $normalized = [];
+        $sortByModule = [];
+
+        foreach ($permissionsList as $code => $definition) {
+            if (!is_string($code) || trim($code) === '') {
+                throw new InvalidArgumentException('Permission code trong file cấu hình không hợp lệ.');
+            }
+
+            $name = is_array($definition) ? (string)($definition['name'] ?? '') : (string)$definition;
+            if (trim($name) === '') {
+                throw new InvalidArgumentException("Permission [$code] thiếu tên hiển thị.");
+            }
+
+            $moduleCode = is_array($definition) && isset($definition['module_code'])
+                ? strtoupper((string)$definition['module_code'])
+                : $this->detectModuleCodeFromPermission($code);
+
+            if (!isset($sortByModule[$moduleCode ?? 'OTHER'])) {
+                $sortByModule[$moduleCode ?? 'OTHER'] = 0;
+            }
+            $sortByModule[$moduleCode ?? 'OTHER']++;
+
+            $normalized[] = [
+                'code' => trim($code),
+                'name' => trim($name),
+                'module_code' => $moduleCode,
+                'sort_order' => is_array($definition) && isset($definition['sort_order'])
+                    ? max(1, (int)$definition['sort_order'])
+                    : $sortByModule[$moduleCode ?? 'OTHER'],
+            ];
+        }
+
+        return $normalized;
+    }
+
+    private function detectModuleCodeFromPermission(string $code): ?string
+    {
+        $prefix = strtolower((string)strtok($code, '.'));
+        return self::MODULE_MAP[$prefix] ?? null;
+    }
+
+    private function reloadCurrentSessionPermissions(): void
+    {
+        if (!isset($_SESSION['role_id'])) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare(
+            "SELECT p.code FROM permissions p
+             JOIN role_permissions rp ON rp.permission_id = p.id
+             WHERE rp.role_id = :rid ORDER BY p.code"
+        );
+        $stmt->execute([':rid' => (int)$_SESSION['role_id']]);
+        $_SESSION['permissions'] = $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
 }

@@ -8,6 +8,7 @@
         <?php // Check quyền nếu cần: if(hasPermission('role.manage')): ?>
             <form id="syncForm" action="<?= url('/admin') ?>/roles/sync" method="POST" style="display: inline;">
                 <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token'] ?? ''; ?>">
+                <input type="hidden" name="redirect_to" value="<?= url('/admin/roles') ?>">
                 <button type="button" class="btn btn-ghost" onclick="confirmSync()">
                     <i class="fas fa-sync-alt me-1"></i> Đồng bộ Quyền
                 </button>

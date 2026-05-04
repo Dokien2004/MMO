@@ -49,8 +49,7 @@ function get_flash(): ?array
  */
 function redirect_to(string $path): void
 {
-    global $basePath;
-    $url = ($basePath ?? '') . $path;
+    $url = url($path);
     header('Location: ' . $url);
     exit;
 }
@@ -90,10 +89,14 @@ function e(string $value): string
 function url(string $path = '/'): string
 {
     global $basePath;
-    if ($path === '/') {
-        return ($basePath ?: '') . '/';
+    $base = rtrim((string)($basePath ?? ''), '/');
+    $normalized = normalize_internal_path($path, $base);
+
+    if ($normalized === '/') {
+        return ($base !== '' ? $base : '') . '/';
     }
-    return ($basePath ?: '') . $path;
+
+    return ($base !== '' ? $base : '') . $normalized;
 }
 
 /**
@@ -102,6 +105,39 @@ function url(string $path = '/'): string
 function asset(string $path): string
 {
     return url('/' . ltrim($path, '/'));
+}
+
+/**
+ * Normalize an app-internal path so helpers can safely handle
+ * raw REQUEST_URI values and already-prefixed paths.
+ */
+function normalize_internal_path(string $path, string $basePath = ''): string
+{
+    $path = trim($path);
+
+    if ($path === '') {
+        return '/';
+    }
+
+    if (preg_match('#^https?://#i', $path) === 1) {
+        $parsedPath = parse_url($path, PHP_URL_PATH) ?: '/';
+        $query = parse_url($path, PHP_URL_QUERY);
+        $path = $parsedPath . ($query ? '?' . $query : '');
+    }
+
+    $pathOnly = parse_url($path, PHP_URL_PATH) ?: '/';
+    $query = parse_url($path, PHP_URL_QUERY);
+
+    if ($basePath !== '' && strpos($pathOnly, $basePath) === 0) {
+        $pathOnly = substr($pathOnly, strlen($basePath)) ?: '/';
+    }
+
+    $pathOnly = '/' . ltrim($pathOnly, '/');
+    if ($pathOnly === '/index.php') {
+        $pathOnly = '/';
+    }
+
+    return $query ? $pathOnly . '?' . $query : $pathOnly;
 }
 
 /**

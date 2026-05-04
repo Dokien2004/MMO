@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="<?= e(csrf_token()) ?>">
     <title><?= e($pageTitle ?? 'Dashboard') ?> — <?= e(APP_NAME) ?></title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="<?= asset('/css/app.css') ?>">
     <?php foreach (($pageCss ?? []) as $cssFile): ?>
         <link rel="stylesheet" href="<?= asset($cssFile) ?>">
@@ -97,7 +98,10 @@
     </nav>
 
     <!-- User info + Logout -->
-    <?php $user = currentUser(); ?>
+    <?php
+    $user = currentUser();
+    $activeSite = currentSite();
+    ?>
     <div class="sidebar-user">
         <div class="sidebar-user-avatar">
             <?= $user ? strtoupper(mb_substr($user['name'], 0, 1)) : '?' ?>
@@ -111,6 +115,59 @@
 </aside>
 
 <main class="main fade-in">
+    <?php
+    $siteOptions = [];
+    if ($user && hasPermission('admin.sites')) {
+        try {
+            $layoutSiteService = new SiteService();
+            $siteOptions = $layoutSiteService->getActive();
+        } catch (Throwable $e) {
+            $siteOptions = [];
+        }
+    }
+    $canSwitchSite = count($siteOptions) > 1;
+    ?>
+    <?php if ($user && hasPermission('admin.sites')): ?>
+        <div class="topbar">
+            <div class="topbar-spacer"></div>
+            <div class="topbar-actions">
+                <div class="site-switcher" id="siteSwitcher">
+                    <button
+                        type="button"
+                        class="site-badge"
+                        id="siteSwitcherButton"
+                        aria-haspopup="true"
+                        aria-expanded="false"
+                        <?= $canSwitchSite ? '' : 'disabled'; ?>
+                    >
+                        <i class="fas fa-building me-2"></i>
+                        <span><?= e($activeSite['name'] ?? ($activeSite['code'] ?? 'Trụ sở chính')); ?></span>
+                        <?php if ($canSwitchSite): ?>
+                            <i class="fas fa-caret-down ms-2"></i>
+                        <?php endif; ?>
+                    </button>
+                    <?php if ($canSwitchSite): ?>
+                        <div class="site-dropdown" id="siteSwitcherMenu">
+                            <div class="site-dropdown-title">Chuyển đổi site</div>
+                            <?php foreach ($siteOptions as $site): ?>
+                                <?php $isActiveSite = (int)($activeSite['id'] ?? 0) === (int)$site['id']; ?>
+                                <a
+                                    href="<?= url('/admin/sites/change/' . (int)$site['id']); ?>"
+                                    class="site-dropdown-item <?= $isActiveSite ? 'active' : ''; ?>"
+                                >
+                                    <span><?= e((string)$site['name']); ?></span>
+                                    <?php if ($isActiveSite): ?>
+                                        <i class="fas fa-check small"></i>
+                                    <?php endif; ?>
+                                </a>
+                            <?php endforeach; ?>
+                            <a href="<?= url('/admin/sites'); ?>" class="site-dropdown-footer">Quản lý sites</a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
     <?php
     $flash = get_flash();
     if ($flash): ?>
@@ -127,5 +184,31 @@
 <?php foreach (($pageJs ?? []) as $jsFile): ?>
     <script src="<?= asset($jsFile) ?>"></script>
 <?php endforeach; ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var switcher = document.getElementById('siteSwitcher');
+    var button = document.getElementById('siteSwitcherButton');
+    var menu = document.getElementById('siteSwitcherMenu');
+
+    if (!switcher || !button || !menu || button.disabled) {
+        return;
+    }
+
+    button.addEventListener('click', function (event) {
+        event.stopPropagation();
+        var expanded = switcher.classList.toggle('open');
+        button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    });
+
+    menu.addEventListener('click', function (event) {
+        event.stopPropagation();
+    });
+
+    document.addEventListener('click', function () {
+        switcher.classList.remove('open');
+        button.setAttribute('aria-expanded', 'false');
+    });
+});
+</script>
 </body>
 </html>

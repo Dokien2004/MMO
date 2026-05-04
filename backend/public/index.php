@@ -244,6 +244,7 @@ $postPermissionMap = [
     '/settings/integrations' => 'settings.edit',
     '/admin/modules/toggle'  => 'admin.modules',
     '/admin/permissions/save' => 'admin.permissions',
+    '/admin/roles/sync'       => 'admin.permissions',
     '/admin/users/store'      => 'admin.users',
     '/admin/users/update'     => 'admin.users',
     '/admin/users/toggle'     => 'admin.users',
@@ -406,6 +407,28 @@ if ($method === 'POST') {
                 $permService = new PermissionService();
                 $result = $permService->saveMatrix($_POST);
                 json_response(true, 'Đã lưu phân quyền cho ' . $result['updated'] . ' roles.');
+                break;
+
+            case '/admin/roles/sync':
+                $configFile = APP_PATH . '/config/permissions_list.php';
+                if (!file_exists($configFile)) {
+                    throw new RuntimeException('Không tìm thấy file cấu hình permissions_list.php.');
+                }
+
+                $permissionsList = require $configFile;
+                if (!is_array($permissionsList)) {
+                    throw new RuntimeException('File permissions_list.php phải trả về một mảng quyền hợp lệ.');
+                }
+
+                $permService = new PermissionService();
+                $result = $permService->syncPermissionsFromConfig($permissionsList);
+                set_flash('success', $result['message']);
+
+                $redirectTo = normalize_internal_path(
+                    (string)($_POST['redirect_to'] ?? '/admin/roles'),
+                    rtrim((string)($basePath ?? ''), '/')
+                );
+                redirect_to($redirectTo);
                 break;
 
             // ── Admin: User CRUD ──

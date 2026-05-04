@@ -53,7 +53,11 @@ function currentSite(): array
 function requireAuth(): void
 {
     if (!isLoggedIn()) {
-        $_SESSION['redirect_after_login'] = $_SERVER['REQUEST_URI'] ?? '/';
+        global $basePath;
+        $_SESSION['redirect_after_login'] = normalize_internal_path(
+            (string)($_SERVER['REQUEST_URI'] ?? '/'),
+            rtrim((string)($basePath ?? ''), '/')
+        );
         redirect_to('/login');
     }
 }

@@ -186,6 +186,37 @@ function translateSubGroupName($key) {
     return $map[strtolower($key)] ?? ucfirst(str_replace('_', ' ', $key));
 }
 
+function permissionIconClass(string $code): string
+{
+    $parts = explode('.', strtolower($code));
+    $action = end($parts) ?: 'default';
+
+    $map = [
+        'view' => 'fas fa-eye',
+        'list' => 'fas fa-list',
+        'create' => 'fas fa-plus-circle',
+        'add' => 'fas fa-plus-circle',
+        'store' => 'fas fa-plus-circle',
+        'edit' => 'fas fa-pen',
+        'update' => 'fas fa-pen',
+        'delete' => 'fas fa-trash-alt',
+        'remove' => 'fas fa-trash-alt',
+        'approve' => 'fas fa-check-circle',
+        'reject' => 'fas fa-ban',
+        'manage' => 'fas fa-sliders-h',
+        'config' => 'fas fa-cog',
+        'settings' => 'fas fa-cog',
+        'sync' => 'fas fa-sync-alt',
+        'run' => 'fas fa-play-circle',
+        'generate' => 'fas fa-magic',
+        'schedule' => 'fas fa-calendar-alt',
+        'unlock' => 'fas fa-unlock-alt',
+        'toggle' => 'fas fa-toggle-on',
+    ];
+
+    return $map[$action] ?? 'fas fa-key';
+}
+
 // Xây dựng grouped data với thống kê
 $moduleStats = [];
 $isAdmin = ($role['id'] == 1);
@@ -217,135 +248,206 @@ $totalPct = $totalPerms > 0 ? round(($totalGranted / $totalPerms) * 100) : 0;
 :root {
     --sidebar-width: 320px;
     --toolbar-height: 56px;
-    --perm-primary: #2563eb;
-    --perm-primary-light: rgba(37,99,235,0.15);
-    --perm-success: #16a34a;
-    --perm-warning: #d97706;
-    --perm-danger: #dc2626;
-    --perm-gray-50: rgba(255,255,255,0.02);
-    --perm-gray-100: rgba(255,255,255,0.05);
-    --perm-gray-200: rgba(255,255,255,0.1);
-    --perm-gray-300: rgba(255,255,255,0.2);
-    --perm-gray-500: #94a3b8;
-    --perm-gray-700: #e2e8f0;
-    --perm-gray-900: #f8fafc;
+    --perm-primary: var(--accent);
+    --perm-primary-strong: #0891b2;
+    --perm-primary-light: rgba(6,182,212,0.14);
+    --perm-success: var(--success);
+    --perm-warning: var(--warning);
+    --perm-danger: var(--danger);
+    --perm-surface: var(--bg-surface);
+    --perm-surface-2: var(--bg-elevated);
+    --perm-surface-3: var(--bg-hover);
+    --perm-border: var(--border);
+    --perm-border-strong: var(--border-hover);
+    --perm-text: var(--text);
+    --perm-text-soft: var(--text-sec);
+    --perm-text-muted: var(--text-muted);
+    --perm-shadow: 0 16px 40px rgba(0,0,0,0.22);
 }
-body { background-color: transparent; }
+body {
+    background:
+        radial-gradient(circle at top left, rgba(34,211,238,0.08), transparent 24%),
+        radial-gradient(circle at bottom right, rgba(139,92,246,0.08), transparent 20%),
+        var(--bg-base);
+}
 
 /* ==================== TOOLBAR ==================== */
 .perm-toolbar {
-    background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px);
-    border-bottom: 1px solid var(--perm-gray-200);
+    background: linear-gradient(180deg, rgba(26,29,50,0.96) 0%, rgba(19,21,37,0.96) 100%);
+    border: 1px solid var(--perm-border);
+    border-radius: 18px 18px 0 0;
     padding: 10px 24px;
-    position: sticky; top: 0; z-index: 100;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    position: relative;
+    box-shadow: var(--perm-shadow);
     display: flex; justify-content: space-between; align-items: center;
     height: var(--toolbar-height);
 }
-.perm-toolbar .role-title { font-size: 1rem; font-weight: 700; color: var(--perm-gray-900); margin: 0; }
-.perm-toolbar .role-subtitle { font-size: 0.75rem; color: var(--perm-gray-500); }
+.perm-toolbar .role-title { font-size: 1rem; font-weight: 700; color: var(--perm-text); margin: 0; }
+.perm-toolbar .role-subtitle { font-size: 0.75rem; color: var(--perm-text-soft); }
 
 /* ==================== LAYOUT ==================== */
-.perm-layout { display: flex; min-height: calc(100vh - var(--toolbar-height) - 60px); }
+.perm-layout {
+    display: flex;
+    min-height: 0;
+    border: 1px solid var(--perm-border);
+    border-top: none;
+    border-radius: 0 0 18px 18px;
+    overflow: visible;
+    background: linear-gradient(180deg, rgba(19,21,37,0.98) 0%, rgba(11,13,23,0.98) 100%);
+    box-shadow: var(--perm-shadow);
+    align-items: flex-start;
+}
 
 /* ==================== SIDEBAR ==================== */
 .perm-sidebar {
     width: var(--sidebar-width); min-width: var(--sidebar-width);
-    background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border-right: 1px solid var(--perm-gray-200);
-    overflow-y: auto; position: sticky; top: var(--toolbar-height);
-    height: calc(100vh - var(--toolbar-height) - 60px);
+    background: linear-gradient(180deg, rgba(26,29,50,0.88) 0%, rgba(15,17,40,0.88) 100%);
+    border-right: 1px solid var(--perm-border);
+    overflow: hidden;
+    position: sticky;
+    top: 24px;
+    align-self: flex-start;
+    border-radius: 0 0 0 18px;
 }
-.sidebar-header { padding: 16px; border-bottom: 1px solid var(--perm-gray-200); background: var(--perm-gray-50); }
+.sidebar-header { padding: 16px; border-bottom: 1px solid var(--perm-border); background: rgba(255,255,255,0.02); }
 .sidebar-search { position: relative; }
 .sidebar-search input {
     width: 100%; padding: 8px 12px 8px 36px;
-    border: 1px solid var(--perm-gray-300); border-radius: 8px;
-    font-size: 0.825rem; background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px);
+    border: 1px solid var(--perm-border-strong); border-radius: 10px;
+    font-size: 0.825rem; background: rgba(11,13,23,0.8);
+    color: var(--perm-text);
     transition: border-color 0.15s, box-shadow 0.15s;
 }
+.sidebar-search input::placeholder { color: var(--perm-text-muted); }
 .sidebar-search input:focus { outline: none; border-color: var(--perm-primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
-.sidebar-search .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--perm-gray-500); font-size: 0.8rem; }
+.sidebar-search .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--perm-text-muted); font-size: 0.8rem; }
 .sidebar-summary {
-    padding: 10px 16px; border-bottom: 1px solid var(--perm-gray-200);
-    background: var(--perm-primary-light); font-size: 0.75rem;
-    color: var(--perm-primary); font-weight: 600;
+    padding: 10px 16px; border-bottom: 1px solid var(--perm-border);
+    background: linear-gradient(135deg, rgba(6,182,212,0.15), rgba(139,92,246,0.12)); font-size: 0.75rem;
+    color: #8ae8f7; font-weight: 700;
     display: flex; justify-content: space-between; align-items: center;
 }
 
 /* Module list */
 .module-list { list-style: none; padding: 0; margin: 0; }
-.module-item { border-bottom: 1px solid var(--perm-gray-100); cursor: pointer; transition: background 0.1s; }
-.module-item:hover { background: var(--perm-gray-50); }
-.module-item.active { background: var(--perm-primary-light); border-left: 3px solid var(--perm-primary); }
+.module-item { border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; transition: background 0.1s; }
+.module-item:hover { background: rgba(255,255,255,0.03); }
+.module-item.active { background: linear-gradient(90deg, rgba(6,182,212,0.14), rgba(6,182,212,0.04)); border-left: 3px solid var(--perm-primary); }
 .module-item.active .module-name { color: var(--perm-primary); font-weight: 700; }
 .module-link { display: flex; align-items: center; padding: 10px 16px; text-decoration: none; color: inherit; gap: 12px; }
 .module-icon {
     width: 32px; height: 32px; border-radius: 8px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 0.8rem; background: var(--perm-gray-100); color: var(--perm-gray-500); flex-shrink: 0;
+    font-size: 0.8rem; background: rgba(255,255,255,0.05); color: var(--perm-text-soft); flex-shrink: 0;
 }
 .module-item.active .module-icon { background: var(--perm-primary); color: #fff; }
 .module-info { flex: 1; min-width: 0; }
-.module-name { font-size: 0.825rem; font-weight: 600; color: var(--perm-gray-700); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.module-count { font-size: 0.7rem; color: var(--perm-gray-500); }
+.module-name { font-size: 0.825rem; font-weight: 600; color: var(--perm-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.module-count { font-size: 0.7rem; color: var(--perm-text-soft); }
 .module-progress { width: 44px; flex-shrink: 0; text-align: right; }
-.module-progress .progress { height: 4px; border-radius: 2px; background: var(--perm-gray-200); margin-bottom: 2px; }
+.module-progress .progress { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.08); margin-bottom: 2px; }
 .module-progress .progress-bar { border-radius: 2px; }
-.module-pct { font-size: 0.65rem; color: var(--perm-gray-500); font-weight: 600; }
+.module-pct { font-size: 0.65rem; color: var(--perm-text-soft); font-weight: 600; }
 
 /* ==================== MAIN CONTENT ==================== */
-.perm-main { flex: 1; padding: 24px; overflow-y: auto; }
+.perm-main {
+    flex: 1; padding: 24px; overflow: visible;
+    background:
+        radial-gradient(circle at top right, rgba(34,211,238,0.08), transparent 30%),
+        radial-gradient(circle at bottom left, rgba(139,92,246,0.08), transparent 28%),
+        rgba(11,13,23,0.78);
+    border-radius: 0 0 18px 0;
+}
+
+.main {
+    background:
+        radial-gradient(circle at top left, rgba(34,211,238,0.07), transparent 22%),
+        radial-gradient(circle at bottom right, rgba(139,92,246,0.07), transparent 18%),
+        var(--bg-base);
+}
 .module-header-card {
-    background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid var(--perm-gray-200);
+    background: linear-gradient(180deg, rgba(26,29,50,0.96) 0%, rgba(19,21,37,0.96) 100%);
+    border-radius: 14px; border: 1px solid var(--perm-border);
     padding: 20px 24px; margin-bottom: 20px;
     display: flex; align-items: center; justify-content: space-between;
 }
-.module-header-card h5 { margin: 0; font-weight: 700; color: var(--perm-gray-900); font-size: 1rem; }
-.module-header-card .module-meta { font-size: 0.8rem; color: var(--perm-gray-500); margin-top: 2px; }
+.module-header-card h5 { margin: 0; font-weight: 700; color: var(--perm-text); font-size: 1rem; }
+.module-header-card .module-meta { font-size: 0.8rem; color: var(--perm-text-soft); margin-top: 2px; }
 .module-header-card .bulk-actions { display: flex; gap: 8px; }
 .module-header-card .bulk-actions .btn { font-size: 0.75rem; font-weight: 600; padding: 4px 12px; border-radius: 6px; }
 
 /* Sub-group cards */
-.subgroup-card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border-radius: 10px; border: 1px solid var(--perm-gray-200); margin-bottom: 16px; overflow: hidden; transition: box-shadow 0.15s; }
-.subgroup-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.subgroup-card { background: linear-gradient(180deg, rgba(26,29,50,0.9) 0%, rgba(19,21,37,0.9) 100%); border-radius: 12px; border: 1px solid var(--perm-border); margin-bottom: 16px; overflow: hidden; transition: box-shadow 0.15s, border-color 0.15s; }
+.subgroup-card:hover { box-shadow: 0 12px 26px rgba(0,0,0,0.18); border-color: var(--perm-border-strong); }
 .subgroup-header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 16px; background: var(--perm-gray-50);
-    border-bottom: 1px solid var(--perm-gray-200);
+    padding: 12px 16px; background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid var(--perm-border);
     cursor: pointer; user-select: none;
 }
-.subgroup-header:hover { background: var(--perm-gray-100); }
-.subgroup-title { font-size: 0.8rem; font-weight: 700; color: var(--perm-gray-700); text-transform: uppercase; letter-spacing: 0.3px; }
+.subgroup-header:hover { background: rgba(255,255,255,0.05); }
+.subgroup-title { font-size: 0.8rem; font-weight: 700; color: var(--perm-text); text-transform: uppercase; letter-spacing: 0.3px; }
 .subgroup-badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
-.subgroup-toggle { font-size: 0.7rem; color: var(--perm-gray-500); transition: transform 0.2s; }
+.subgroup-toggle { font-size: 0.7rem; color: var(--perm-text-soft); transition: transform 0.2s; }
 .subgroup-toggle.collapsed { transform: rotate(-90deg); }
-.subgroup-body { padding: 8px 0; }
+.subgroup-body {
+    padding: 14px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
 
 /* Permission row */
 .perm-row {
-    display: flex; align-items: center; padding: 8px 16px;
-    border-bottom: 1px solid var(--perm-gray-50);
-    transition: background 0.1s; cursor: pointer; gap: 12px;
+    display: flex; align-items: center; padding: 12px 14px;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    transition: background 0.1s, border-color 0.1s, transform 0.1s; cursor: pointer; gap: 12px;
+    min-height: 72px;
+    background: rgba(7, 12, 24, 0.42);
 }
-.perm-row:last-child { border-bottom: none; }
-.perm-row:hover { background: #f0f7ff; }
-.perm-row.is-checked { background: var(--perm-primary-light); }
+.perm-row:hover { background: rgba(255,255,255,0.05); border-color: rgba(6,182,212,0.28); transform: translateY(-1px); }
+.perm-row.is-checked { background: linear-gradient(135deg, rgba(6,182,212,0.16), rgba(6,182,212,0.05)); border-color: rgba(6,182,212,0.26); }
 .perm-row .form-check-input {
     width: 18px; height: 18px; border-radius: 4px;
-    border: 2px solid var(--perm-gray-300); cursor: pointer; flex-shrink: 0; margin: 0;
+    border: 2px solid rgba(148,163,184,0.45); cursor: pointer; flex-shrink: 0; margin: 0;
+    background-color: rgba(11,13,23,0.8);
 }
 .perm-row .form-check-input:checked { background-color: var(--perm-primary); border-color: var(--perm-primary); }
+.perm-row .perm-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: #8ae8f7;
+    background: rgba(6,182,212,0.12);
+    border: 1px solid rgba(6,182,212,0.18);
+}
+.perm-row .perm-copy {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
 .perm-row .perm-code {
     font-family: 'SF Mono','Fira Code',monospace;
-    font-size: 0.72rem; color: var(--perm-primary);
-    background: var(--perm-primary-light); padding: 2px 8px;
+    font-size: 0.72rem; color: #8ae8f7;
+    background: rgba(6,182,212,0.12); padding: 3px 8px;
     border-radius: 4px; white-space: nowrap; flex-shrink: 0; min-width: 160px;
+    border: 1px solid rgba(6,182,212,0.16);
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
 }
-.perm-row .perm-label { font-size: 0.82rem; color: var(--perm-gray-700); flex: 1; }
-.perm-row.is-checked .perm-label { color: var(--perm-primary); font-weight: 600; }
+.perm-row .perm-label { font-size: 0.84rem; color: var(--perm-text); flex: 1; line-height: 1.45; }
+.perm-row.is-checked .perm-label { color: #d7f9ff; font-weight: 600; }
 
 /* No results */
-.perm-no-results { text-align: center; padding: 60px 20px; color: var(--perm-gray-500); }
+.perm-no-results { text-align: center; padding: 60px 20px; color: var(--perm-text-soft); }
 .perm-no-results i { font-size: 3rem; margin-bottom: 16px; opacity: 0.3; }
 
 /* Floating change counter */
@@ -364,11 +466,16 @@ body { background-color: transparent; }
 /* Responsive */
 @media (max-width: 992px) {
     .perm-sidebar { width: 260px; min-width: 260px; }
-    .perm-row .perm-code { display: none; }
+    .subgroup-body { grid-template-columns: 1fr; }
 }
 @media (max-width: 768px) {
     .perm-layout { flex-direction: column; }
-    .perm-sidebar { width: 100%; min-width: 100%; position: relative; height: auto; max-height: 300px; }
+    .perm-sidebar { width: 100%; min-width: 100%; position: relative; top: 0; max-height: none; border-right: none; border-bottom: 1px solid var(--perm-border); border-radius: 0; }
+    .perm-toolbar { height: auto; gap: 12px; align-items: flex-start; flex-direction: column; }
+    .module-header-card { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .subgroup-body { padding: 10px; gap: 10px; }
+    .perm-row { padding: 12px; min-height: 68px; }
+    .perm-main { border-radius: 0 0 18px 18px; }
 }
 </style>
 
@@ -395,6 +502,13 @@ body { background-color: transparent; }
             </div>
         </div>
         <div class="d-flex align-items-center gap-2">
+            <form id="syncPermissionConfigForm" action="<?= url('/admin') ?>/roles/sync" method="POST" class="m-0">
+                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? ''; ?>">
+                <input type="hidden" name="redirect_to" value="<?= url('/admin/roles/permissions/' . (int)$role['id']) ?>">
+                <button type="button" class="btn btn-light btn-sm border fw-bold text-secondary" onclick="confirmPermissionSync()">
+                    <i class="fas fa-sync-alt me-1"></i> Đồng bộ quyền
+                </button>
+            </form>
             <?php if (!$isAdmin): ?>
                 <span id="changeIndicator" class="badge bg-warning text-dark me-2" style="display:none; font-size:0.72rem;">
                     <i class="fas fa-pen me-1"></i> <span id="changeCount">0</span> thay đổi
@@ -557,6 +671,7 @@ body { background-color: transparent; }
                                 <?php foreach ($subPerms as $p):
                                     $isChecked = $isAdmin || in_array($p['id'], $role_permissions);
                                     $displayName = preg_replace('/^\[.*?\]\s*/', '', $p['name']);
+                                    $permIcon = permissionIconClass($p['code']);
                                 ?>
                                     <label class="perm-row <?= $isChecked ? 'is-checked' : ''; ?>"
                                            data-code="<?= strtolower($p['code']); ?>"
@@ -566,8 +681,11 @@ body { background-color: transparent; }
                                                data-panel="<?= $tabId; ?>" data-sub="<?= $subId; ?>"
                                                <?= $isChecked ? 'checked' : ''; ?>
                                                <?= $isAdmin ? 'disabled checked' : ''; ?>>
-                                        <span class="perm-code"><?= htmlspecialchars($p['code']); ?></span>
-                                        <span class="perm-label"><?= htmlspecialchars($displayName); ?></span>
+                                        <span class="perm-icon"><i class="<?= $permIcon; ?>"></i></span>
+                                        <span class="perm-copy">
+                                            <span class="perm-code"><?= htmlspecialchars($p['code']); ?></span>
+                                            <span class="perm-label"><?= htmlspecialchars($displayName); ?></span>
+                                        </span>
                                     </label>
                                 <?php endforeach; ?>
                             </div>
@@ -910,8 +1028,8 @@ function toggleSubgroup(subId) {
     }
 }
 
-function confirmPermSave() {
-    Swal.fire({
+    function confirmPermSave() {
+        Swal.fire({
         title: 'Lưu cấu hình phân quyền?',
         text: 'Quyền hạn sẽ được cập nhật ngay lập tức cho tất cả người dùng thuộc vai trò này.',
         icon: 'question',
@@ -925,8 +1043,27 @@ function confirmPermSave() {
             Swal.fire({ title: 'Đang xử lý...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             document.getElementById('permissionForm').submit();
         }
-    });
-}
+        });
+    }
+
+    function confirmPermissionSync() {
+        Swal.fire({
+            title: 'Đồng bộ danh mục quyền?',
+            text: 'Hệ thống sẽ đọc lại file cấu hình và cập nhật bảng permissions trong database.',
+            icon: 'question',
+            showCancelButton: true,
+            background: 'var(--perm-surface, #111827)',
+            color: 'var(--perm-gray-900)',
+            confirmButtonColor: '#2563eb',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: '<i class="fas fa-sync-alt me-1"></i> Đồng bộ',
+            cancelButtonText: 'Hủy'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                document.getElementById('syncPermissionConfigForm').submit();
+            }
+        });
+    }
 
 function resetPermForm() {
     Swal.fire({
@@ -941,4 +1078,3 @@ function resetPermForm() {
     });
 }
 </script>
-
