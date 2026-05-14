@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS scheduled_posts (
     content_id BIGINT UNSIGNED NOT NULL,
     product_id BIGINT UNSIGNED NOT NULL,
     channel VARCHAR(50) NOT NULL,
+    social_channel_id INT UNSIGNED NULL,
     scheduled_at VARCHAR(40) NULL,
     posted_at VARCHAR(40) NULL,
     status VARCHAR(50) DEFAULT 'scheduled',

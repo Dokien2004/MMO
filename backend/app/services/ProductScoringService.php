@@ -15,11 +15,22 @@ require_once __DIR__ . '/OpenAIContentProvider.php';
 final class ProductScoringService
 {
     private PDO $pdo;
+    private static bool $schemaBootstrapped = false;
 
     public function __construct()
     {
         $this->pdo = db_pdo();
-        $this->ensureScoresTable();
+    }
+
+    public static function bootstrapSchema(): void
+    {
+        if (self::$schemaBootstrapped) {
+            return;
+        }
+
+        $service = new self();
+        $service->ensureScoresTable();
+        self::$schemaBootstrapped = true;
     }
 
     /**

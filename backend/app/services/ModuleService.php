@@ -64,6 +64,10 @@ class ModuleService
 
         // Reload session
         $_SESSION['enabled_modules'] = $this->getEnabledCodes();
+        $_SESSION['enabled_modules_cache'] = [
+            'expires_at' => time() + 300,
+            'data' => $_SESSION['enabled_modules'],
+        ];
 
         return true;
     }

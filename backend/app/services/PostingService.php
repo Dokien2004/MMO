@@ -15,10 +15,12 @@ final class PostingService
     private ProductSyncService $productSyncService;
     private TaskLogService $taskLogService;
     private FacebookPagePublisher $facebookPagePublisher;
+    private PDO $pdo;
     private string $fileName = 'scheduled_posts.json';
 
     public function __construct()
     {
+        $this->pdo = db_pdo();
         $this->storage = new DatabaseStorage();
         $this->contentService = new ContentService();
         $this->productSyncService = new ProductSyncService();
@@ -26,7 +28,7 @@ final class PostingService
         $this->facebookPagePublisher = new FacebookPagePublisher();
     }
 
-    public function schedulePost(int $contentId, string $channel = 'fanpage_manual', ?string $scheduledAt = null): array
+    public function schedulePost(int $contentId, string $channel = 'fanpage_manual', ?string $scheduledAt = null, ?int $socialChannelId = null): array
     {
         $content = $this->contentService->findById($contentId);
         if ($content === null) {
@@ -37,29 +39,37 @@ final class PostingService
             throw new InvalidArgumentException('Chi content approved moi duoc schedule dang bai.');
         }
 
-        $posts = $this->allPosts();
-        $existing = $this->findByContentId($contentId);
         $scheduledTime = $this->normalizeScheduledAt($scheduledAt);
-        $record = [
-            'id' => $existing['id'] ?? $this->nextId($posts),
-            'site_id' => (int)($content['site_id'] ?? currentSiteId()),
-            'content_id' => $contentId,
-            'product_id' => (int)$content['product_id'],
-            'channel' => $channel,
-            'scheduled_at' => $scheduledTime,
-            'status' => 'scheduled',
-            'posted_at' => $existing['posted_at'] ?? null,
-            'result_note' => '',
-            'remote_post_id' => $existing['remote_post_id'] ?? '',
-            'created_at' => $existing['created_at'] ?? date('c'),
-            'updated_at' => date('c'),
-        ];
+        $record = $this->storage->mutate($this->fileName, function (array $posts) use ($content, $contentId, $channel, $scheduledTime, $socialChannelId): array {
+            $existing = $this->findByContentIdInRows($posts, $contentId);
+            $record = [
+                'id' => $existing['id'] ?? $this->nextId($posts),
+                'site_id' => (int)($content['site_id'] ?? currentSiteId()),
+                'content_id' => $contentId,
+                'product_id' => (int)$content['product_id'],
+                'channel' => $channel,
+                'social_channel_id' => $socialChannelId ?? (($existing['social_channel_id'] ?? null) !== null ? (int)$existing['social_channel_id'] : null),
+                'scheduled_at' => $scheduledTime,
+                'status' => 'scheduled',
+                'posted_at' => $existing['posted_at'] ?? null,
+                'result_note' => '',
+                'remote_post_id' => $existing['remote_post_id'] ?? '',
+                'created_at' => $existing['created_at'] ?? date('c'),
+                'updated_at' => date('c'),
+            ];
 
-        $posts = $this->upsertPost($posts, $record);
-        $this->savePosts($posts);
+            $posts = $this->upsertPost($posts, $record);
+
+            return [
+                'rows' => $this->sortPosts($posts),
+                'result' => $record,
+            ];
+        });
+
         $this->taskLogService->create('schedule_post', 'success', [
             'content_id' => $contentId,
             'channel' => $channel,
+            'social_channel_id' => $socialChannelId,
         ], [
             'scheduled_at' => $scheduledTime,
         ]);
@@ -233,6 +243,9 @@ final class PostingService
             if (!isset($post['remote_post_id'])) {
                 $post['remote_post_id'] = '';
             }
+            if (!array_key_exists('social_channel_id', $post)) {
+                $post['social_channel_id'] = null;
+            }
         }
         unset($post);
         usort($posts, static function (array $left, array $right): int {
@@ -248,12 +261,23 @@ final class PostingService
 
     public function summary(): array
     {
-        $posts = $this->allPosts();
+        $stmt = $this->pdo->prepare(
+            'SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN status = \'scheduled\' THEN 1 ELSE 0 END) AS scheduled_count,
+                SUM(CASE WHEN status = \'success\' THEN 1 ELSE 0 END) AS success_count,
+                SUM(CASE WHEN status = \'failed\' THEN 1 ELSE 0 END) AS failed_count
+             FROM scheduled_posts
+             WHERE site_id = :site_id'
+        );
+        $stmt->execute([':site_id' => currentSiteId()]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
         return [
-            'total' => count($posts),
-            'scheduled' => count(array_filter($posts, static fn(array $row): bool => ($row['status'] ?? '') === 'scheduled')),
-            'success' => count(array_filter($posts, static fn(array $row): bool => ($row['status'] ?? '') === 'success')),
-            'failed' => count(array_filter($posts, static fn(array $row): bool => ($row['status'] ?? '') === 'failed')),
+            'total' => (int)($row['total'] ?? 0),
+            'scheduled' => (int)($row['scheduled_count'] ?? 0),
+            'success' => (int)($row['success_count'] ?? 0),
+            'failed' => (int)($row['failed_count'] ?? 0),
         ];
     }
 
@@ -264,34 +288,43 @@ final class PostingService
 
     private function changePostStatus(int $postId, string $status, string $resultNote, string $remotePostId = ''): array
     {
-        $posts = $this->allPosts();
-        foreach ($posts as &$post) {
-            if ((int)($post['id'] ?? 0) !== $postId) {
-                continue;
-            }
-            $post['status'] = $status;
-            $post['result_note'] = $resultNote;
-            $post['updated_at'] = date('c');
-            if ($remotePostId !== '') {
-                $post['remote_post_id'] = $remotePostId;
-            }
-            if ($status === 'success') {
-                $post['posted_at'] = date('c');
-                $this->contentService->markUsed((int)$post['content_id']);
-            }
-            $this->savePosts($posts);
-            $this->taskLogService->create('post_status_change', 'success', [
-                'post_id' => $postId,
-                'status' => $status,
-            ], [
-                'content_id' => (int)$post['content_id'],
-                'remote_post_id' => $remotePostId,
-            ]);
-            return $post;
-        }
-        unset($post);
+        $post = $this->storage->mutate($this->fileName, function (array $posts) use ($postId, $status, $resultNote, $remotePostId): array {
+            foreach ($posts as &$post) {
+                if ((int)($post['id'] ?? 0) !== $postId) {
+                    continue;
+                }
+                $post['status'] = $status;
+                $post['result_note'] = $resultNote;
+                $post['updated_at'] = date('c');
+                if ($remotePostId !== '') {
+                    $post['remote_post_id'] = $remotePostId;
+                }
+                if ($status === 'success') {
+                    $post['posted_at'] = date('c');
+                }
 
-        throw new InvalidArgumentException('Khong tim thay bai dang can cap nhat.');
+                return [
+                    'rows' => $this->sortPosts($posts),
+                    'result' => $post,
+                ];
+            }
+            unset($post);
+
+            throw new InvalidArgumentException('Khong tim thay bai dang can cap nhat.');
+        });
+
+        if ($status === 'success') {
+            $this->contentService->markUsed((int)$post['content_id']);
+        }
+        $this->taskLogService->create('post_status_change', 'success', [
+            'post_id' => $postId,
+            'status' => $status,
+        ], [
+            'content_id' => (int)$post['content_id'],
+            'remote_post_id' => $remotePostId,
+        ]);
+
+        return $post;
     }
 
     private function findByContentId(int $contentId): ?array
@@ -329,15 +362,12 @@ final class PostingService
 
     private function savePosts(array $posts): void
     {
-        usort($posts, static function (array $left, array $right): int {
-            return strcmp((string)($right['updated_at'] ?? ''), (string)($left['updated_at'] ?? ''));
-        });
-        $this->storage->write($this->fileName, $posts);
+        $this->storage->write($this->fileName, $this->sortPosts($posts));
     }
 
     private function nextId(array $posts): int
     {
-        return $this->storage->nextId($this->fileName);
+        return $this->storage->nextIdForRows($posts);
     }
 
     private function normalizeScheduledAt(?string $scheduledAt): string
@@ -354,5 +384,25 @@ final class PostingService
 
         $timestamp = strtotime($candidate);
         return $timestamp === false ? time() + 3600 : $timestamp;
+    }
+
+    private function findByContentIdInRows(array $posts, int $contentId): ?array
+    {
+        foreach ($posts as $post) {
+            if ((int)($post['content_id'] ?? 0) === $contentId) {
+                return $post;
+            }
+        }
+
+        return null;
+    }
+
+    private function sortPosts(array $posts): array
+    {
+        usort($posts, static function (array $left, array $right): int {
+            return strcmp((string)($right['updated_at'] ?? ''), (string)($left['updated_at'] ?? ''));
+        });
+
+        return $posts;
     }
 }

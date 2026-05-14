@@ -485,8 +485,12 @@ a:hover { color: var(--accent-light); }
 
 /* ═══════ TABLES ═══════ */
 .table-wrap {
-    overflow-x: auto; border-radius: var(--r);
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--r);
     border: 1px solid var(--border);
+    margin-bottom: 1rem;
 }
 
 table {

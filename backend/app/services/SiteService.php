@@ -8,11 +8,22 @@ declare(strict_types=1);
 class SiteService
 {
     private PDO $pdo;
+    private static bool $schemaBootstrapped = false;
 
     public function __construct()
     {
         $this->pdo = db_pdo();
-        $this->ensureSchema();
+    }
+
+    public static function bootstrapSchema(): void
+    {
+        if (self::$schemaBootstrapped) {
+            return;
+        }
+
+        $service = new self();
+        $service->ensureSchema();
+        self::$schemaBootstrapped = true;
     }
 
     public function ensureSchema(): void
@@ -148,6 +159,7 @@ SQL);
             ':master' => $site['is_master'],
             ':active' => $site['is_active'],
         ]);
+        $this->clearSiteCache();
 
         return (int)$this->pdo->lastInsertId();
     }
@@ -172,7 +184,7 @@ SQL);
              WHERE id = :id"
         );
 
-        return $stmt->execute([
+        $result = $stmt->execute([
             ':code' => $site['code'],
             ':name' => $site['name'],
             ':address' => $site['address'],
@@ -181,6 +193,8 @@ SQL);
             ':active' => $site['is_active'],
             ':id' => $id,
         ]);
+        $this->clearSiteCache();
+        return $result;
     }
 
     public function toggleActive(int $id, bool $active): bool
@@ -194,7 +208,9 @@ SQL);
         }
 
         $stmt = $this->pdo->prepare("UPDATE sites SET is_active = :active WHERE id = :id");
-        return $stmt->execute([':active' => $active ? 1 : 0, ':id' => $id]);
+        $result = $stmt->execute([':active' => $active ? 1 : 0, ':id' => $id]);
+        $this->clearSiteCache();
+        return $result;
     }
 
     public function changeCurrentSite(int $id): array
@@ -211,6 +227,7 @@ SQL);
         $_SESSION['user_site_id'] = (int)$site['id'];
         $_SESSION['site_code'] = $site['code'];
         $_SESSION['site_name'] = $site['name'];
+        $this->clearSiteCache();
 
         return $site;
     }
@@ -300,5 +317,14 @@ SQL);
         $safeTable = addslashes($table);
         $stmt = $this->pdo->query("SHOW TABLES LIKE '{$safeTable}'");
         return (bool)$stmt->fetch();
+    }
+
+    private function clearSiteCache(): void
+    {
+        foreach (array_keys($_SESSION) as $key) {
+            if (strpos((string)$key, 'active_sites_cache_') === 0) {
+                unset($_SESSION[$key]);
+            }
+        }
     }
 }

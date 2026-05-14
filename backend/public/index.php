@@ -115,27 +115,84 @@ if ($path === '/health') {
 // ══════════════════════════════════════════
 requireAuth();
 
-// ── Initialize services (only for authenticated requests) ──
-$productSyncService = new ProductSyncService();
-$userSelectedProductService = new UserSelectedProductService();
-$taskLogService = new TaskLogService();
-$siteService = new SiteService();
-$linkService = new AffiliateLinkService();
-$contentService = new ContentService();
-$imageMediaService = new ImageMediaService();
-$videoMediaService = new VideoMediaService();
-$postingService = new PostingService();
-$automationSettingsService = new AutomationSettingsService();
-$integrationConfigService = new IntegrationConfigService();
-$scraperService = new ScraperService();
-$pendingScrapeJobService = new PendingScrapeJobService();
-$scoringService = new ProductScoringService();
-$userProductService = new UserProductService();
-$channelService = new SocialChannelService();
+final class LazyServiceProxy
+{
+    private $factory;
+    private ?object $instance = null;
+
+    public function __construct(callable $factory)
+    {
+        $this->factory = $factory;
+    }
+
+    public function __call(string $name, array $arguments)
+    {
+        return $this->instance()->{$name}(...$arguments);
+    }
+
+    private function instance(): object
+    {
+        if ($this->instance === null) {
+            $factory = $this->factory;
+            $this->instance = $factory();
+        }
+
+        return $this->instance;
+    }
+}
+
+$serviceFactories = [
+    'productSync' => static fn() => new ProductSyncService(),
+    'userSelectedProduct' => static fn() => new UserSelectedProductService(),
+    'taskLog' => static fn() => new TaskLogService(),
+    'site' => static fn() => new SiteService(),
+    'link' => static fn() => new AffiliateLinkService(),
+    'content' => static fn() => new ContentService(),
+    'imageMedia' => static fn() => new ImageMediaService(),
+    'videoMedia' => static fn() => new VideoMediaService(),
+    'posting' => static fn() => new PostingService(),
+    'automationSettings' => static fn() => new AutomationSettingsService(),
+    'integrationConfig' => static fn() => new IntegrationConfigService(),
+    'scraper' => static fn() => new ScraperService(),
+    'pendingScrapeJob' => static fn() => new PendingScrapeJobService(),
+    'scoring' => static fn() => new ProductScoringService(),
+    'userProduct' => static fn() => new UserProductService(),
+    'channel' => static fn() => new SocialChannelService(),
+];
+
+$serviceCache = [];
+$service = static function (string $key) use (&$serviceCache, $serviceFactories): object {
+    if (!isset($serviceCache[$key])) {
+        if (!isset($serviceFactories[$key])) {
+            throw new InvalidArgumentException('Unknown service key: ' . $key);
+        }
+        $serviceCache[$key] = new LazyServiceProxy($serviceFactories[$key]);
+    }
+
+    return $serviceCache[$key];
+};
+
+// ── Lazy service proxies (only instantiated when route actually uses them) ──
+$productSyncService = $service('productSync');
+$userSelectedProductService = $service('userSelectedProduct');
+$taskLogService = $service('taskLog');
+$siteService = $service('site');
+$linkService = $service('link');
+$contentService = $service('content');
+$imageMediaService = $service('imageMedia');
+$videoMediaService = $service('videoMedia');
+$postingService = $service('posting');
+$automationSettingsService = $service('automationSettings');
+$integrationConfigService = $service('integrationConfig');
+$scraperService = $service('scraper');
+$pendingScrapeJobService = $service('pendingScrapeJob');
+$scoringService = $service('scoring');
+$userProductService = $service('userProduct');
+$channelService = $service('channel');
 
 function queueScrapeIntervention(
-    PendingScrapeJobService $pendingScrapeJobService,
-    ScraperService $scraperService,
+    $pendingScrapeJobService,
+    $scraperService,
     string $type,
     array $payload,
     string $reason
@@ -162,7 +219,7 @@ function queueScrapeIntervention(
     return $job;
 }
 
-function queueScrapeAuto(PendingScrapeJobService $pendingScrapeJobService, string $type, array $payload): array
+function queueScrapeAuto($pendingScrapeJobService, string $type, array $payload): array
 {
     $job = $pendingScrapeJobService->create($type, $payload, 'queued');
     @exec(PHP_BINARY . ' ' . escapeshellarg(BASE_PATH . '/scripts/scraper_telegram_worker.php') . ' > ' . escapeshellarg(STORAGE_PATH . '/logs/scraper_telegram_worker.out.log') . ' 2>&1 &');
@@ -587,12 +644,13 @@ if ($method === 'POST') {
                 }
                 $data = [
                     'source_product_id' => $product['source_product_id'],
-                    'product_name' => $product['product_name'],
-                    'product_url' => $product['product_url'],
+                    'product_name' => !empty($_POST['product_name']) ? trim((string)$_POST['product_name']) : $product['product_name'],
+                    'product_url' => !empty($_POST['product_url']) ? trim((string)$_POST['product_url']) : $product['product_url'],
                     'affiliate_url' => $affiliateUrl,
                     'source_platform' => $product['source_platform'],
                     'price' => $product['price'],
-                    'status' => !empty($affiliateUrl) ? 'pending' : 'pending',
+                    'status' => !empty($_POST['status']) ? trim((string)$_POST['status']) : (!empty($affiliateUrl) ? 'pending' : 'pending'),
+                    'notes' => trim((string)($_POST['notes'] ?? '')),
                 ];
                 $saved = $userSelectedProductService->upsert($data);
                 json_response(true, 'Đã thêm sản phẩm vào danh sách chọn.');
@@ -1064,10 +1122,9 @@ if ($method === 'POST') {
 //  PAGE ROUTES (GET — rendered with layout)
 // ══════════════════════════════════════════
 
-$automationSettings = $automationSettingsService->get();
-
 switch ($path) {
     case '/':
+        $automationSettings = $automationSettingsService->get();
         render('dashboard/index', [
             'pageTitle'      => 'Dashboard',
             'currentPage'    => 'dashboard',
@@ -1089,19 +1146,44 @@ switch ($path) {
         $offset = ($page - 1) * $perPage;
         $siteId = (int)currentSiteId();
         $pdo = db_pdo();
-        $total = (int)$pdo->query("SELECT COUNT(*) FROM affiliate_products WHERE site_id = {$siteId}")->fetchColumn();
-        $dbProducts = $pdo->query(
-            "SELECT * FROM affiliate_products WHERE site_id = {$siteId} ORDER BY sold_count DESC, id DESC LIMIT {$perPage} OFFSET {$offset}"
-        )->fetchAll(PDO::FETCH_ASSOC);
+        $totalStmt = $pdo->prepare('SELECT COUNT(*) FROM affiliate_products WHERE site_id = :site_id');
+        $totalStmt->bindValue(':site_id', $siteId, PDO::PARAM_INT);
+        $totalStmt->execute();
+        $total = (int)$totalStmt->fetchColumn();
+
+        $productsStmt = $pdo->prepare(
+            'SELECT * FROM affiliate_products
+             WHERE site_id = :site_id
+             ORDER BY sold_count DESC, id DESC
+             LIMIT :limit OFFSET :offset'
+        );
+        $productsStmt->bindValue(':site_id', $siteId, PDO::PARAM_INT);
+        $productsStmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+        $productsStmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $productsStmt->execute();
+        $dbProducts = $productsStmt->fetchAll(PDO::FETCH_ASSOC);
         $totalPages = max(1, (int)ceil($total / $perPage));
+
+        $summaryStmt = $pdo->prepare(
+            'SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN affiliate_url != "" THEN 1 ELSE 0 END) AS with_link,
+                SUM(CASE WHEN sold_count >= 50 THEN 1 ELSE 0 END) AS hot
+             FROM affiliate_products
+             WHERE site_id = :site_id'
+        );
+        $summaryStmt->bindValue(':site_id', $siteId, PDO::PARAM_INT);
+        $summaryStmt->execute();
+        $summaryRow = $summaryStmt->fetch(PDO::FETCH_ASSOC) ?: [];
         $productSummary = [
-            'total' => $total,
-            'with_link' => (int)$pdo->query("SELECT COUNT(*) FROM affiliate_products WHERE site_id = {$siteId} AND affiliate_url != ''")->fetchColumn(),
-            'hot' => (int)$pdo->query("SELECT COUNT(*) FROM affiliate_products WHERE site_id = {$siteId} AND sold_count >= 50")->fetchColumn(),
+            'total' => (int)($summaryRow['total'] ?? $total),
+            'with_link' => (int)($summaryRow['with_link'] ?? 0),
+            'hot' => (int)($summaryRow['hot'] ?? 0),
         ];
         render('products/index', [
             'pageTitle'      => 'Sản phẩm',
             'currentPage'    => 'products',
+            'pageJs'         => ['/js/modules/products.js'],
             'productSummary' => $productSummary,
             'products'       => $dbProducts,
             'pagination'     => ['page' => $page, 'perPage' => $perPage, 'total' => $total, 'totalPages' => $totalPages],
@@ -1109,6 +1191,7 @@ switch ($path) {
         break;
 
     case '/contents':
+        $automationSettings = $automationSettingsService->get();
         render('contents/index', [
             'pageTitle'      => 'Nội dung',
             'currentPage'    => 'contents',
@@ -1120,8 +1203,10 @@ switch ($path) {
         break;
 
     case '/posts':
+        $automationSettings = $automationSettingsService->get();
+        $contents = $contentService->allContents();
         $postContents = [];
-        foreach ($contentService->allContents() as $content) {
+        foreach ($contents as $content) {
             $postContents[(int)$content['id']] = $content;
         }
         render('posts/index', [
@@ -1130,7 +1215,7 @@ switch ($path) {
             'postSummary'  => $postingService->summary(),
             'posts'        => $postingService->allPosts(),
             'postContents' => $postContents,
-            'contents'     => $contentService->allContents(),
+            'contents'     => $contents,
             'fanpageApiReady' => $postingService->fanpageApiAvailable(),
             'integrationStatus' => $automationSettingsService->integrationStatus(),
             'automationSettings' => $automationSettings,
@@ -1198,6 +1283,7 @@ switch ($path) {
         render('my-products/index', [
             'pageTitle'   => 'SP Đã Chọn — My Products',
             'currentPage' => 'my_products',
+            'pageJs'      => ['/js/modules/my-products.js'],
             'products'    => $products,
             'summary'     => $userProductService->summary(),
             'filters'     => $filters,
@@ -1215,6 +1301,7 @@ switch ($path) {
         break;
 
     case '/settings':
+        $automationSettings = $automationSettingsService->get();
         render('settings/index', [
             'pageTitle' => 'Tự động hóa',
             'currentPage' => 'settings',

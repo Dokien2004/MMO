@@ -11,11 +11,22 @@ declare(strict_types=1);
 final class UserProductService
 {
     private PDO $pdo;
+    private static bool $schemaBootstrapped = false;
 
     public function __construct()
     {
         $this->pdo = db_pdo();
-        $this->ensureTable();
+    }
+
+    public static function bootstrapSchema(): void
+    {
+        if (self::$schemaBootstrapped) {
+            return;
+        }
+
+        $service = new self();
+        $service->ensureTable();
+        self::$schemaBootstrapped = true;
     }
 
     /**

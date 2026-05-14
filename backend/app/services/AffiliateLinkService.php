@@ -11,10 +11,12 @@ final class AffiliateLinkService
     private DatabaseStorage $storage;
     private ProductSyncService $productSyncService;
     private TaskLogService $taskLogService;
+    private PDO $pdo;
     private string $fileName = 'affiliate_links.json';
 
     public function __construct()
     {
+        $this->pdo = db_pdo();
         $this->storage = new DatabaseStorage();
         $this->productSyncService = new ProductSyncService();
         $this->taskLogService = new TaskLogService();
@@ -33,24 +35,28 @@ final class AffiliateLinkService
         }
         $this->assertValidAffiliateUrl($affiliateUrl, (string)($product['source_platform'] ?? ''));
 
-        $links = $this->allLinks();
-        $linkId = $this->nextId($links);
+        $linkRecord = $this->storage->mutate($this->fileName, function (array $links) use ($product, $affiliateUrl, $campaignCode): array {
+            $linkRecord = [
+                'id' => $this->storage->nextIdForRows($links),
+                'site_id' => (int)($product['site_id'] ?? currentSiteId()),
+                'product_id' => (int)$product['id'],
+                'source_platform' => (string)$product['source_platform'],
+                'original_url' => (string)$product['product_url'],
+                'affiliate_url' => $affiliateUrl,
+                'campaign_code' => $campaignCode,
+                'status' => 'active',
+                'created_at' => date('c'),
+                'updated_at' => date('c'),
+            ];
 
-        $linkRecord = [
-            'id' => $linkId,
-            'site_id' => (int)($product['site_id'] ?? currentSiteId()),
-            'product_id' => (int)$product['id'],
-            'source_platform' => (string)$product['source_platform'],
-            'original_url' => (string)$product['product_url'],
-            'affiliate_url' => $affiliateUrl,
-            'campaign_code' => $campaignCode,
-            'status' => 'active',
-            'created_at' => date('c'),
-            'updated_at' => date('c'),
-        ];
+            $links = $this->upsertLink($links, $linkRecord);
 
-        $links = $this->upsertLink($links, $linkRecord);
-        $this->saveLinks($links);
+            return [
+                'rows' => $this->sortLinks($links),
+                'result' => $linkRecord,
+            ];
+        });
+
         $this->syncProductLinkState((int)$product['id'], $affiliateUrl);
 
         $this->taskLogService->create('save_affiliate_link', 'success', [
@@ -117,31 +123,34 @@ final class AffiliateLinkService
 
     public function summary(): array
     {
-        $links = $this->allLinks();
+        $stmt = $this->pdo->prepare(
+            'SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN status = \'active\' THEN 1 ELSE 0 END) AS active_count,
+                SUM(CASE WHEN status = \'expired\' THEN 1 ELSE 0 END) AS expired_count,
+                SUM(CASE WHEN status = \'error\' THEN 1 ELSE 0 END) AS error_count
+             FROM affiliate_links
+             WHERE site_id = :site_id'
+        );
+        $stmt->execute([':site_id' => currentSiteId()]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
         return [
-            'total' => count($links),
-            'active' => count(array_filter($links, static fn(array $link): bool => ($link['status'] ?? '') === 'active')),
-            'expired' => count(array_filter($links, static fn(array $link): bool => ($link['status'] ?? '') === 'expired')),
-            'error' => count(array_filter($links, static fn(array $link): bool => ($link['status'] ?? '') === 'error')),
+            'total' => (int)($row['total'] ?? 0),
+            'active' => (int)($row['active_count'] ?? 0),
+            'expired' => (int)($row['expired_count'] ?? 0),
+            'error' => (int)($row['error_count'] ?? 0),
         ];
     }
 
     private function syncProductLinkState(int $productId, string $affiliateUrl): void
     {
-        $products = $this->productSyncService->allProducts();
-        foreach ($products as &$product) {
-            if ((int)($product['id'] ?? 0) !== $productId) {
-                continue;
-            }
-            $product['affiliate_url'] = $affiliateUrl;
-            if (($product['status'] ?? 'new') === 'new') {
-                $product['status'] = 'linked';
-            }
-            $product['updated_at'] = date('c');
+        $changes = ['affiliate_url' => $affiliateUrl];
+        $product = $this->productSyncService->findProductById($productId);
+        if (($product['status'] ?? 'new') === 'new') {
+            $changes['status'] = 'linked';
         }
-        unset($product);
-
-        $this->productSyncService->saveProducts($products);
+        $this->productSyncService->updateProduct($productId, $changes);
     }
 
     private function upsertLink(array $links, array $linkRecord): array
@@ -161,15 +170,21 @@ final class AffiliateLinkService
 
     private function saveLinks(array $links): void
     {
-        usort($links, static function (array $left, array $right): int {
-            return strcmp((string)($right['updated_at'] ?? ''), (string)($left['updated_at'] ?? ''));
-        });
-        $this->storage->write($this->fileName, $links);
+        $this->storage->write($this->fileName, $this->sortLinks($links));
     }
 
     private function nextId(array $links): int
     {
-        return $this->storage->nextId($this->fileName);
+        return $this->storage->nextIdForRows($links);
+    }
+
+    private function sortLinks(array $links): array
+    {
+        usort($links, static function (array $left, array $right): int {
+            return strcmp((string)($right['updated_at'] ?? ''), (string)($left['updated_at'] ?? ''));
+        });
+
+        return $links;
     }
 
     private function assertValidAffiliateUrl(string $affiliateUrl, string $platform): void

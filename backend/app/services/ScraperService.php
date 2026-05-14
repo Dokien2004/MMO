@@ -36,6 +36,7 @@ final class ScraperService
     private bool $shopeeSessionBootstrapped = false;
     private string $browserScriptPath;
     private string $cloakBrowserScriptPath;
+    private static bool $schemaBootstrapped = false;
 
     /** Danh mục Shopee phổ biến (catid) để cào trending */
     public const SHOPEE_CATEGORIES = [
@@ -63,8 +64,18 @@ final class ScraperService
         $this->cookieFile = sys_get_temp_dir() . '/mmo_scraper_cookies.txt';
         $this->browserScriptPath = BASE_PATH . '/scripts/shopee_browser_scraper.js';
         $this->cloakBrowserScriptPath = BASE_PATH . '/scripts/shopee_cloak_scraper.mjs';
-        $this->ensureConfigTable();
-        $this->ensureMarketSnapshotTable();
+    }
+
+    public static function bootstrapSchema(): void
+    {
+        if (self::$schemaBootstrapped) {
+            return;
+        }
+
+        $service = new self();
+        $service->ensureConfigTable();
+        $service->ensureMarketSnapshotTable();
+        self::$schemaBootstrapped = true;
     }
 
     /**

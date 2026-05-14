@@ -9,10 +9,12 @@ final class ProductSyncService
 {
     private DatabaseStorage $storage;
     private TaskLogService $taskLogService;
+    private PDO $pdo;
     private string $fileName = 'products.json';
 
     public function __construct()
     {
+        $this->pdo = db_pdo();
         $this->storage = new DatabaseStorage();
         $this->taskLogService = new TaskLogService();
     }
@@ -20,70 +22,80 @@ final class ProductSyncService
     public function syncBatch(string $platform, array $products): array
     {
         $normalizedPlatform = $this->sanitizePlatform($platform);
-        $existing = $this->allProducts();
-        $indexed = [];
+        $mutation = $this->storage->mutate($this->fileName, function (array $existing) use ($normalizedPlatform, $products): array {
+            $indexed = [];
 
-        foreach ($existing as $item) {
-            if (!isset($item['site_id'])) {
-                $item['site_id'] = currentSiteId();
-            }
-            if (!isset($item['sold_count'])) {
-                $item['sold_count'] = 0;
-            }
-            $indexed[$item['source_platform'] . '::' . $item['source_product_id']] = $item;
-        }
-
-        $inserted = 0;
-        $updated = 0;
-        $processed = [];
-
-        foreach ($products as $product) {
-            $record = $this->normalizeProduct($normalizedPlatform, $product);
-            $key = $record['source_platform'] . '::' . $record['source_product_id'];
-            if (isset($indexed[$key])) {
-                $record['id'] = $indexed[$key]['id'];
-                $record['created_at'] = $indexed[$key]['created_at'];
-                $record['affiliate_url'] = trim((string)($product['affiliate_url'] ?? '')) !== ''
-                    ? trim((string)$product['affiliate_url'])
-                    : ($indexed[$key]['affiliate_url'] ?? '');
-                $record['content_status'] = $indexed[$key]['content_status'] ?? 'none';
-                if (($record['affiliate_url'] ?? '') !== '' && ($record['status'] ?? 'new') === 'new') {
-                    $record['status'] = 'linked';
+            foreach ($existing as $item) {
+                if (!isset($item['site_id'])) {
+                    $item['site_id'] = currentSiteId();
                 }
-                if (!isset($product['sold_count']) && !isset($product['order_count']) && !isset($product['sales_count'])) {
-                    $record['sold_count'] = (int)($indexed[$key]['sold_count'] ?? 0);
+                if (!isset($item['sold_count'])) {
+                    $item['sold_count'] = 0;
                 }
-                $updated++;
-            } else {
-                $record['id'] = $this->nextId($indexed);
-                $record['created_at'] = date('c');
-                $record['affiliate_url'] = trim((string)($record['affiliate_url'] ?? $product['affiliate_url'] ?? ''));
-                if ($record['affiliate_url'] !== '' && ($record['status'] ?? 'new') === 'new') {
-                    $record['status'] = 'linked';
-                }
-                $record['content_status'] = 'none';
-                $inserted++;
+                $indexed[$item['source_platform'] . '::' . $item['source_product_id']] = $item;
             }
 
-            $record['updated_at'] = date('c');
-            $indexed[$key] = $record;
-            $processed[] = $record;
-        }
+            $inserted = 0;
+            $updated = 0;
+            $processed = [];
 
-        $this->saveProducts(array_values($indexed));
+            foreach ($products as $product) {
+                $record = $this->normalizeProduct($normalizedPlatform, $product);
+                $key = $record['source_platform'] . '::' . $record['source_product_id'];
+                if (isset($indexed[$key])) {
+                    $record['id'] = $indexed[$key]['id'];
+                    $record['created_at'] = $indexed[$key]['created_at'];
+                    $record['affiliate_url'] = trim((string)($product['affiliate_url'] ?? '')) !== ''
+                        ? trim((string)$product['affiliate_url'])
+                        : ($indexed[$key]['affiliate_url'] ?? '');
+                    $record['content_status'] = $indexed[$key]['content_status'] ?? 'none';
+                    if (($record['affiliate_url'] ?? '') !== '' && ($record['status'] ?? 'new') === 'new') {
+                        $record['status'] = 'linked';
+                    }
+                    if (!isset($product['sold_count']) && !isset($product['order_count']) && !isset($product['sales_count'])) {
+                        $record['sold_count'] = (int)($indexed[$key]['sold_count'] ?? 0);
+                    }
+                    $updated++;
+                } else {
+                    $record['id'] = $this->storage->nextIdForRows($indexed);
+                    $record['created_at'] = date('c');
+                    $record['affiliate_url'] = trim((string)($record['affiliate_url'] ?? $product['affiliate_url'] ?? ''));
+                    if ($record['affiliate_url'] !== '' && ($record['status'] ?? 'new') === 'new') {
+                        $record['status'] = 'linked';
+                    }
+                    $record['content_status'] = 'none';
+                    $inserted++;
+                }
+
+                $record['updated_at'] = date('c');
+                $indexed[$key] = $record;
+                $processed[] = $record;
+            }
+
+            return [
+                'rows' => array_values($indexed),
+                'result' => [
+                    'inserted' => $inserted,
+                    'updated' => $updated,
+                    'processed' => $processed,
+                    'stored_total' => count($indexed),
+                ],
+            ];
+        });
+
         $summary = [
             'platform' => $normalizedPlatform,
             'received_count' => count($products),
-            'inserted_count' => $inserted,
-            'updated_count' => $updated,
-            'stored_total' => count($indexed),
+            'inserted_count' => (int)$mutation['inserted'],
+            'updated_count' => (int)$mutation['updated'],
+            'stored_total' => (int)$mutation['stored_total'],
         ];
 
         $this->taskLogService->create('manual_product_sync', 'success', ['platform' => $normalizedPlatform], $summary);
 
         return [
             'summary' => $summary,
-            'products' => $processed,
+            'products' => $mutation['processed'],
         ];
     }
 
@@ -125,18 +137,23 @@ final class ProductSyncService
 
     public function updateProduct(int $productId, array $changes): void
     {
-        $products = $this->allProducts();
-        foreach ($products as &$product) {
-            if ((int)($product['id'] ?? 0) !== $productId) {
-                continue;
+        $this->storage->mutate($this->fileName, function (array $products) use ($productId, $changes): array {
+            foreach ($products as &$product) {
+                if ((int)($product['id'] ?? 0) !== $productId) {
+                    continue;
+                }
+                foreach ($changes as $key => $value) {
+                    $product[$key] = $value;
+                }
+                $product['updated_at'] = date('c');
             }
-            foreach ($changes as $key => $value) {
-                $product[$key] = $value;
-            }
-            $product['updated_at'] = date('c');
-        }
-        unset($product);
-        $this->saveProducts($products);
+            unset($product);
+
+            return [
+                'rows' => $products,
+                'result' => null,
+            ];
+        });
     }
 
     public function createManualProduct(array $input): array
@@ -185,52 +202,49 @@ final class ProductSyncService
 
     public function dashboardSummary(): array
     {
-        $products = $this->allProducts();
-        $statusSummary = [
-            'total' => count($products),
-            'new' => 0,
-            'linked' => 0,
-            'content_ready' => 0,
-            'posted' => 0,
-            'archived' => 0,
-            'high_demand' => 0,
-            'max_sold_count' => 0,
+        $stmt = $this->pdo->prepare(
+            'SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN status = \'new\' THEN 1 ELSE 0 END) AS new_count,
+                SUM(CASE WHEN status = \'linked\' THEN 1 ELSE 0 END) AS linked_count,
+                SUM(CASE WHEN status = \'content_ready\' THEN 1 ELSE 0 END) AS content_ready_count,
+                SUM(CASE WHEN status = \'posted\' THEN 1 ELSE 0 END) AS posted_count,
+                SUM(CASE WHEN status = \'archived\' THEN 1 ELSE 0 END) AS archived_count,
+                SUM(CASE WHEN sold_count >= 50 THEN 1 ELSE 0 END) AS high_demand,
+                MAX(sold_count) AS max_sold_count
+             FROM affiliate_products
+             WHERE site_id = :site_id'
+        );
+        $stmt->execute([':site_id' => currentSiteId()]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'total' => (int)($row['total'] ?? 0),
+            'new' => (int)($row['new_count'] ?? 0),
+            'linked' => (int)($row['linked_count'] ?? 0),
+            'content_ready' => (int)($row['content_ready_count'] ?? 0),
+            'posted' => (int)($row['posted_count'] ?? 0),
+            'archived' => (int)($row['archived_count'] ?? 0),
+            'high_demand' => (int)($row['high_demand'] ?? 0),
+            'max_sold_count' => (int)($row['max_sold_count'] ?? 0),
         ];
-
-        foreach ($products as $product) {
-            $status = $product['status'] ?? 'new';
-            if (isset($statusSummary[$status])) {
-                $statusSummary[$status]++;
-            }
-
-            $soldCount = (int)($product['sold_count'] ?? 0);
-            if ($soldCount >= 50) {
-                $statusSummary['high_demand']++;
-            }
-            if ($soldCount > $statusSummary['max_sold_count']) {
-                $statusSummary['max_sold_count'] = $soldCount;
-            }
-        }
-
-        return $statusSummary;
     }
 
     public function topSellingProducts(int $limit = 5, int $minSoldCount = 0): array
     {
-        $products = array_filter($this->allProducts(), static function (array $product) use ($minSoldCount): bool {
-            return (int)($product['sold_count'] ?? 0) >= $minSoldCount;
-        });
+        $stmt = $this->pdo->prepare(
+            'SELECT *
+             FROM affiliate_products
+             WHERE site_id = :site_id AND sold_count >= :min_sold_count
+             ORDER BY sold_count DESC, updated_at DESC
+             LIMIT :lim'
+        );
+        $stmt->bindValue(':site_id', currentSiteId(), PDO::PARAM_INT);
+        $stmt->bindValue(':min_sold_count', $minSoldCount, PDO::PARAM_INT);
+        $stmt->bindValue(':lim', $limit, PDO::PARAM_INT);
+        $stmt->execute();
 
-        usort($products, static function (array $left, array $right): int {
-            $soldCompare = (int)($right['sold_count'] ?? 0) <=> (int)($left['sold_count'] ?? 0);
-            if ($soldCompare !== 0) {
-                return $soldCompare;
-            }
-
-            return strcmp((string)($right['updated_at'] ?? ''), (string)($left['updated_at'] ?? ''));
-        });
-
-        return array_slice($products, 0, $limit);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     private function parseCsvFile(string $tmpPath): array

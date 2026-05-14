@@ -199,6 +199,7 @@ CREATE TABLE `scheduled_posts` (
   `content_id` bigint(20) unsigned NOT NULL,
   `product_id` bigint(20) unsigned NOT NULL,
   `channel` varchar(50) NOT NULL,
+  `social_channel_id` int(10) unsigned DEFAULT NULL,
   `scheduled_at` varchar(40) DEFAULT NULL,
   `posted_at` varchar(40) DEFAULT NULL,
   `status` varchar(50) DEFAULT 'scheduled',
@@ -208,6 +209,28 @@ CREATE TABLE `scheduled_posts` (
   `updated_at` varchar(40) NOT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_content_status` (`content_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table: social_channels
+DROP TABLE IF EXISTS `social_channels`;
+CREATE TABLE `social_channels` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int(11) NOT NULL DEFAULT 1,
+  `channel_type` enum('facebook_page','facebook_group','tiktok','instagram') NOT NULL DEFAULT 'facebook_page',
+  `channel_name` varchar(200) NOT NULL DEFAULT '',
+  `channel_id` varchar(200) NOT NULL DEFAULT '' COMMENT 'Page ID, Group ID, TikTok username',
+  `access_token` text DEFAULT NULL,
+  `cookie_data` text DEFAULT NULL COMMENT 'Browser session cookies (encrypted)',
+  `config` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`config`)),
+  `status` enum('active','paused','error') NOT NULL DEFAULT 'active',
+  `last_post_at` datetime DEFAULT NULL,
+  `daily_post_limit` int(11) NOT NULL DEFAULT 5,
+  `posts_today` int(11) NOT NULL DEFAULT 0,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_channels_site` (`site_id`,`channel_type`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Table: scraper_configs

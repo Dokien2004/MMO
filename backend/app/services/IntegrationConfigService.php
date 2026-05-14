@@ -6,6 +6,7 @@ final class IntegrationConfigService
 {
     private string $path;
     private PDO $pdo;
+    private static bool $schemaBootstrapped = false;
 
     /** @var array<string, string> */
     private array $allowedKeys = [
@@ -53,7 +54,17 @@ final class IntegrationConfigService
     {
         $this->path = __DIR__ . '/../config/local.php';
         $this->pdo = db_pdo();
-        $this->ensureSchema();
+    }
+
+    public static function bootstrapSchema(): void
+    {
+        if (self::$schemaBootstrapped) {
+            return;
+        }
+
+        $service = new self();
+        $service->ensureSchema();
+        self::$schemaBootstrapped = true;
     }
 
     public function current(): array
@@ -153,7 +164,7 @@ final class IntegrationConfigService
         }
     }
 
-    private function ensureSchema(): void
+    public function ensureSchema(): void
     {
         $this->pdo->exec("CREATE TABLE IF NOT EXISTS site_integration_configs (
             site_id INT UNSIGNED NOT NULL,

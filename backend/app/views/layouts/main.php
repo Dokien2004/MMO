@@ -6,13 +6,11 @@
     <meta name="csrf-token" content="<?= e(csrf_token()) ?>">
     <title><?= e($pageTitle ?? 'Dashboard') ?> — <?= e(APP_NAME) ?></title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-    <link rel="stylesheet" href="<?= asset('/css/app.css') ?>">
+    <link rel="stylesheet" href="<?= asset('/css/app.css') ?>?v=<?= filemtime(__DIR__.'/../../../public/css/app.css') ?>">
     <?php foreach (($pageCss ?? []) as $cssFile): ?>
         <link rel="stylesheet" href="<?= asset($cssFile) ?>">
     <?php endforeach; ?>
-<script>
-(function(){var t=localStorage.getItem('theme')||'dark';document.documentElement.setAttribute('data-theme',t);})()
-</script>
+    <script src="<?= asset('/js/theme-init.js') ?>"></script>
 </head>
 <body>
 
@@ -29,7 +27,6 @@
     </div>
     <nav class="sidebar-nav">
         <?php
-        // Dynamic sidebar — chỉ hiển thị modules đang bật
         $sidebarModules = [
             'DASHBOARD' => ['url' => '/',            'page' => 'dashboard', 'label' => 'Tổng quan',           'svg' => '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>'],
             'SCRAPER'   => ['url' => '/scraper',    'page' => 'scraper',   'label' => 'Product Radar',        'svg' => '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35M11 8v6M8 11h6" stroke-width="2" fill="none" stroke="currentColor"/></svg>'],
@@ -48,10 +45,7 @@
         ];
 
         $currentPage = $currentPage ?? '';
-        // Always refresh from DB so new modules appear without re-login
-        $moduleService = new ModuleService();
-        $enabledModules = $moduleService->getEnabledCodes();
-        $_SESSION['enabled_modules'] = $enabledModules;
+        $enabledModules = cached_enabled_modules();
         ?>
 
         <div class="nav-section">
@@ -106,7 +100,6 @@
         </div>
     </nav>
 
-    <!-- User info + Logout -->
     <?php
     $user = currentUser();
     $activeSite = currentSite();
@@ -128,8 +121,7 @@
     $siteOptions = [];
     if ($user && hasPermission('admin.sites')) {
         try {
-            $layoutSiteService = new SiteService();
-            $siteOptions = $layoutSiteService->getActive();
+            $siteOptions = cached_active_sites_for_admin();
         } catch (Throwable $e) {
             $siteOptions = [];
         }
@@ -193,48 +185,5 @@
 <?php foreach (($pageJs ?? []) as $jsFile): ?>
     <script src="<?= asset($jsFile) ?>"></script>
 <?php endforeach; ?>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    var switcher = document.getElementById('siteSwitcher');
-    var button = document.getElementById('siteSwitcherButton');
-    var menu = document.getElementById('siteSwitcherMenu');
-
-    if (!switcher || !button || !menu || button.disabled) {
-        return;
-    }
-
-    button.addEventListener('click', function (event) {
-        event.stopPropagation();
-        var expanded = switcher.classList.toggle('open');
-        button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-    });
-
-    menu.addEventListener('click', function (event) {
-        event.stopPropagation();
-    });
-
-    document.addEventListener('click', function () {
-        switcher.classList.remove('open');
-        button.setAttribute('aria-expanded', 'false');
-    });
-});
-
-// Theme toggle
-(function(){
-    var btn = document.getElementById('themeToggle');
-    if (!btn) return;
-    function applyTheme(t) {
-        document.documentElement.setAttribute('data-theme', t);
-        localStorage.setItem('theme', t);
-        btn.textContent = t === 'light' ? '☀️' : '🌙';
-        btn.title = t === 'light' ? 'Chuyển sang giao diện tối' : 'Chuyển sang giao diện sáng';
-    }
-    applyTheme(localStorage.getItem('theme') || 'dark');
-    btn.addEventListener('click', function() {
-        var current = document.documentElement.getAttribute('data-theme') || 'dark';
-        applyTheme(current === 'dark' ? 'light' : 'dark');
-    });
-})();
-</script>
 </body>
 </html>

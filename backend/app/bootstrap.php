@@ -37,3 +37,89 @@ require_once __DIR__ . '/services/UserProductService.php';
 require_once __DIR__ . '/services/SocialChannelService.php';
 require_once __DIR__ . '/services/FacebookGroupPublisher.php';
 require_once __DIR__ . '/services/TikTokPublisher.php';
+
+function bootstrap_runtime_schema_once(): void
+{
+    static $bootstrapped = false;
+    if ($bootstrapped) {
+        return;
+    }
+
+    $markerDir = STORAGE_PATH . '/cache';
+    if (!is_dir($markerDir)) {
+        mkdir($markerDir, 0775, true);
+    }
+
+    $schemaVersion = md5(implode('|', [
+        'database-storage-v2',
+        'site-service-v1',
+        'automation-settings-v1',
+        'integration-config-v1',
+        'scraper-v1',
+        'user-product-v1',
+        'social-channel-v1',
+        'product-scoring-v1',
+    ]));
+    $markerFile = $markerDir . '/runtime_schema.version';
+    $currentVersion = is_file($markerFile) ? trim((string)file_get_contents($markerFile)) : '';
+
+    if ($currentVersion !== $schemaVersion) {
+        DatabaseStorage::bootstrapSchema();
+        SiteService::bootstrapSchema();
+        AutomationSettingsService::bootstrapSchema();
+        IntegrationConfigService::bootstrapSchema();
+        ScraperService::bootstrapSchema();
+        UserProductService::bootstrapSchema();
+        SocialChannelService::bootstrapSchema();
+        ProductScoringService::bootstrapSchema();
+        file_put_contents($markerFile, $schemaVersion, LOCK_EX);
+    }
+
+    $bootstrapped = true;
+}
+
+bootstrap_runtime_schema_once();
+
+function cached_enabled_modules(int $ttlSeconds = 300): array
+{
+    $cached = $_SESSION['enabled_modules_cache'] ?? null;
+    if (
+        is_array($cached)
+        && isset($cached['expires_at'], $cached['data'])
+        && (int)$cached['expires_at'] >= time()
+        && is_array($cached['data'])
+    ) {
+        return $cached['data'];
+    }
+
+    $modules = (new ModuleService())->getEnabledCodes();
+    $_SESSION['enabled_modules'] = $modules;
+    $_SESSION['enabled_modules_cache'] = [
+        'expires_at' => time() + $ttlSeconds,
+        'data' => $modules,
+    ];
+
+    return $modules;
+}
+
+function cached_active_sites_for_admin(int $ttlSeconds = 300): array
+{
+    $siteKey = 'active_sites_cache_' . currentSiteId();
+    $cached = $_SESSION[$siteKey] ?? null;
+    if (
+        is_array($cached)
+        && isset($cached['expires_at'], $cached['data'])
+        && (int)$cached['expires_at'] >= time()
+        && is_array($cached['data'])
+    ) {
+        return $cached['data'];
+    }
+
+    $sites = (new SiteService())->getActive();
+    $_SESSION[$siteKey] = [
+        'expires_at' => time() + $ttlSeconds,
+        'data' => $sites,
+    ];
+
+    return $sites;
+}

@@ -5,6 +5,7 @@ declare(strict_types=1);
 final class DatabaseStorage
 {
     private PDO $pdo;
+    private static bool $schemaBootstrapped = false;
 
     /** @var array<string, array{table:string, columns:array<int,string>, json:array<int,string>}> */
     private array $maps = [
@@ -25,7 +26,7 @@ final class DatabaseStorage
         ],
         'scheduled_posts.json' => [
             'table' => 'scheduled_posts',
-            'columns' => ['id', 'site_id', 'content_id', 'product_id', 'channel', 'scheduled_at', 'posted_at', 'status', 'result_note', 'remote_post_id', 'created_at', 'updated_at'],
+            'columns' => ['id', 'site_id', 'content_id', 'product_id', 'channel', 'social_channel_id', 'scheduled_at', 'posted_at', 'status', 'result_note', 'remote_post_id', 'created_at', 'updated_at'],
             'json' => [],
         ],
         'task_logs.json' => [
@@ -38,10 +39,91 @@ final class DatabaseStorage
     public function __construct()
     {
         $this->pdo = db_pdo();
-        $this->ensureSchema();
+    }
+
+    public static function bootstrapSchema(): void
+    {
+        if (self::$schemaBootstrapped) {
+            return;
+        }
+
+        $storage = new self();
+        $storage->ensureSchema();
+        self::$schemaBootstrapped = true;
     }
 
     public function read(string $fileName): array
+    {
+        return $this->readRows($fileName);
+    }
+
+    public function write(string $fileName, array $payload): void
+    {
+        $this->mutate($fileName, static fn(): array => [
+            'rows' => $payload,
+            'result' => null,
+        ]);
+    }
+
+    public function mutate(string $fileName, callable $callback): mixed
+    {
+        $lockName = $this->lockName($fileName);
+        $this->acquireLock($lockName);
+
+        try {
+            $this->pdo->beginTransaction();
+            try {
+                $rows = $this->readRows($fileName);
+                $mutation = $callback($rows);
+
+                if (is_array($mutation) && array_key_exists('rows', $mutation)) {
+                    $rowsToPersist = is_array($mutation['rows']) ? $mutation['rows'] : [];
+                    $returnValue = $mutation['result'] ?? $rowsToPersist;
+                } elseif (is_array($mutation)) {
+                    $rowsToPersist = $mutation;
+                    $returnValue = $rowsToPersist;
+                } else {
+                    throw new InvalidArgumentException('Mutation callback must return rows or [rows, result].');
+                }
+
+                $this->replaceRows($fileName, $rowsToPersist);
+                $this->pdo->commit();
+
+                return $returnValue;
+            } catch (Throwable $throwable) {
+                if ($this->pdo->inTransaction()) {
+                    $this->pdo->rollBack();
+                }
+                throw $throwable;
+            }
+        } finally {
+            $this->releaseLock($lockName);
+        }
+    }
+
+    public function nextIdForRows(array $rows): int
+    {
+        $maxId = 0;
+        foreach ($rows as $row) {
+            $maxId = max($maxId, (int)($row['id'] ?? 0));
+        }
+
+        return $maxId + 1;
+    }
+
+    public function nextId(string $fileName): int
+    {
+        $lockName = $this->lockName($fileName);
+        $this->acquireLock($lockName);
+
+        try {
+            return $this->nextIdForRows($this->readRows($fileName));
+        } finally {
+            $this->releaseLock($lockName);
+        }
+    }
+
+    private function readRows(string $fileName): array
     {
         $map = $this->map($fileName);
         $table = $map['table'];
@@ -50,79 +132,7 @@ final class DatabaseStorage
         $stmt->execute([':site_id' => $this->currentSiteId()]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-        foreach ($rows as &$row) {
-            foreach ($map['json'] as $jsonColumn) {
-                $decoded = json_decode((string)($row[$jsonColumn] ?? ''), true);
-                $row[$jsonColumn] = is_array($decoded) ? $decoded : [];
-            }
-            foreach ($row as $key => $value) {
-                if ($value === null) {
-                    continue;
-                }
-                if (in_array($key, ['id', 'site_id', 'product_id', 'affiliate_link_id', 'content_id', 'sold_count'], true)) {
-                    $row[$key] = (int)$value;
-                }
-                if ($key === 'price') {
-                    $row[$key] = (float)$value;
-                }
-            }
-        }
-        unset($row);
-
-        return $rows;
-    }
-
-    public function write(string $fileName, array $payload): void
-    {
-        $map = $this->map($fileName);
-        $table = $map['table'];
-        $columns = $map['columns'];
-        $placeholders = array_map(static fn(string $column): string => ':' . $column, $columns);
-        $sql = sprintf(
-            'INSERT INTO %s (%s) VALUES (%s)',
-            $table,
-            implode(', ', $columns),
-            implode(', ', $placeholders)
-        );
-
-        $this->pdo->beginTransaction();
-        try {
-            $delete = $this->pdo->prepare('DELETE FROM ' . $table . ' WHERE site_id = :site_id');
-            $delete->execute([':site_id' => $this->currentSiteId()]);
-            $stmt = $this->pdo->prepare($sql);
-            foreach ($payload as $row) {
-                if (!is_array($row)) {
-                    continue;
-                }
-                $params = [];
-                $row['site_id'] = $this->currentSiteId();
-                foreach ($columns as $column) {
-                    $value = $row[$column] ?? $this->defaultValue($column);
-                    if (in_array($column, $map['json'], true)) {
-                        $value = json_encode(is_array($value) ? $value : [], JSON_UNESCAPED_UNICODE);
-                    }
-                    if (in_array($column, ['created_at', 'updated_at', 'scheduled_at', 'posted_at'], true)) {
-                        $value = $this->normalizeDateValue($value);
-                    }
-                    if ($column === 'updated_at' && ($value === null || $value === '')) {
-                        $value = $this->normalizeDateValue($row['created_at'] ?? date('Y-m-d H:i:s'));
-                    }
-                    $params[':' . $column] = $value;
-                }
-                $stmt->execute($params);
-            }
-            $this->pdo->commit();
-        } catch (Throwable $throwable) {
-            $this->pdo->rollBack();
-            throw $throwable;
-        }
-    }
-
-    public function nextId(string $fileName): int
-    {
-        $map = $this->map($fileName);
-        $stmt = $this->pdo->query('SELECT COALESCE(MAX(id), 0) + 1 FROM ' . $map['table']);
-        return max(1, (int)$stmt->fetchColumn());
+        return $this->normalizeRows($rows, $map);
     }
 
     private function currentSiteId(): int
@@ -138,6 +148,30 @@ final class DatabaseStorage
         return $this->maps[$fileName];
     }
 
+    private function normalizeRows(array $rows, array $map): array
+    {
+        foreach ($rows as &$row) {
+            foreach ($map['json'] as $jsonColumn) {
+                $decoded = json_decode((string)($row[$jsonColumn] ?? ''), true);
+                $row[$jsonColumn] = is_array($decoded) ? $decoded : [];
+            }
+            foreach ($row as $key => $value) {
+                if ($value === null) {
+                    continue;
+                }
+                if (in_array($key, ['id', 'site_id', 'product_id', 'affiliate_link_id', 'content_id', 'sold_count', 'social_channel_id'], true)) {
+                    $row[$key] = (int)$value;
+                }
+                if ($key === 'price') {
+                    $row[$key] = (float)$value;
+                }
+            }
+        }
+        unset($row);
+
+        return $rows;
+    }
+
     private function defaultValue(string $column): mixed
     {
         return match ($column) {
@@ -145,7 +179,7 @@ final class DatabaseStorage
             'price' => 0,
             'sold_count' => 0,
             'payload', 'result_payload' => [],
-            'affiliate_link_id', 'scheduled_at', 'posted_at' => null,
+            'affiliate_link_id', 'social_channel_id', 'scheduled_at', 'posted_at' => null,
             'media_type' => 'none',
             'media_status' => 'none',
             'created_at', 'updated_at' => date('Y-m-d H:i:s'),
@@ -268,6 +302,7 @@ CREATE TABLE IF NOT EXISTS scheduled_posts (
     content_id BIGINT UNSIGNED NOT NULL,
     product_id BIGINT UNSIGNED NOT NULL,
     channel VARCHAR(50) NOT NULL,
+    social_channel_id INT UNSIGNED NULL,
     scheduled_at DATETIME NULL,
     posted_at DATETIME NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
@@ -313,6 +348,47 @@ SQL);
         $this->ensureColumn('generated_contents', 'media_url', "VARCHAR(2000) NOT NULL DEFAULT '' AFTER media_type");
         $this->ensureColumn('generated_contents', 'media_prompt', 'TEXT NULL AFTER media_url');
         $this->ensureColumn('generated_contents', 'media_status', "VARCHAR(30) NOT NULL DEFAULT 'none' AFTER media_prompt");
+        $this->ensureColumn('scheduled_posts', 'social_channel_id', 'INT UNSIGNED NULL AFTER channel');
+    }
+
+    private function replaceRows(string $fileName, array $payload): void
+    {
+        $map = $this->map($fileName);
+        $table = $map['table'];
+        $columns = $map['columns'];
+        $placeholders = array_map(static fn(string $column): string => ':' . $column, $columns);
+        $sql = sprintf(
+            'INSERT INTO %s (%s) VALUES (%s)',
+            $table,
+            implode(', ', $columns),
+            implode(', ', $placeholders)
+        );
+
+        $delete = $this->pdo->prepare('DELETE FROM ' . $table . ' WHERE site_id = :site_id');
+        $delete->execute([':site_id' => $this->currentSiteId()]);
+
+        $stmt = $this->pdo->prepare($sql);
+        foreach ($payload as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $params = [];
+            $row['site_id'] = $this->currentSiteId();
+            foreach ($columns as $column) {
+                $value = $row[$column] ?? $this->defaultValue($column);
+                if (in_array($column, $map['json'], true)) {
+                    $value = json_encode(is_array($value) ? $value : [], JSON_UNESCAPED_UNICODE);
+                }
+                if (in_array($column, ['created_at', 'updated_at', 'scheduled_at', 'posted_at'], true)) {
+                    $value = $this->normalizeDateValue($value);
+                }
+                if ($column === 'updated_at' && ($value === null || $value === '')) {
+                    $value = $this->normalizeDateValue($row['created_at'] ?? date('Y-m-d H:i:s'));
+                }
+                $params[':' . $column] = $value;
+            }
+            $stmt->execute($params);
+        }
     }
 
     private function ensureColumn(string $table, string $column, string $definition): void
@@ -331,5 +407,25 @@ SQL);
         }
 
         $this->pdo->exec(sprintf('ALTER TABLE %s ADD COLUMN %s %s', $table, $column, $definition));
+    }
+
+    private function lockName(string $fileName): string
+    {
+        return sprintf('affiliate_storage:%d:%s', $this->currentSiteId(), md5($fileName));
+    }
+
+    private function acquireLock(string $lockName): void
+    {
+        $stmt = $this->pdo->prepare('SELECT GET_LOCK(:lock_name, 10)');
+        $stmt->execute([':lock_name' => $lockName]);
+        if ((int)$stmt->fetchColumn() !== 1) {
+            throw new RuntimeException('Khong the lay storage lock: ' . $lockName);
+        }
+    }
+
+    private function releaseLock(string $lockName): void
+    {
+        $stmt = $this->pdo->prepare('SELECT RELEASE_LOCK(:lock_name)');
+        $stmt->execute([':lock_name' => $lockName]);
     }
 }

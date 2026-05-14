@@ -5,11 +5,22 @@ declare(strict_types=1);
 final class AutomationSettingsService
 {
     private PDO $pdo;
+    private static bool $schemaBootstrapped = false;
 
     public function __construct()
     {
         $this->pdo = db_pdo();
-        $this->ensureSchema();
+    }
+
+    public static function bootstrapSchema(): void
+    {
+        if (self::$schemaBootstrapped) {
+            return;
+        }
+
+        $service = new self();
+        $service->ensureSchema();
+        self::$schemaBootstrapped = true;
     }
 
     public function get(): array
@@ -205,7 +216,7 @@ SQL;
         return is_array($row) ? $this->castRow($row) : null;
     }
 
-    private function ensureSchema(): void
+    public function ensureSchema(): void
     {
         $this->pdo->exec(<<<'SQL'
 CREATE TABLE IF NOT EXISTS automation_settings (

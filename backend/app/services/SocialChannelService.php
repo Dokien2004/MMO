@@ -11,11 +11,22 @@ declare(strict_types=1);
 final class SocialChannelService
 {
     private \PDO $pdo;
+    private static bool $schemaBootstrapped = false;
 
     public function __construct()
     {
         $this->pdo = db_pdo();
-        $this->ensureTable();
+    }
+
+    public static function bootstrapSchema(): void
+    {
+        if (self::$schemaBootstrapped) {
+            return;
+        }
+
+        $service = new self();
+        $service->ensureTable();
+        self::$schemaBootstrapped = true;
     }
 
     /**
@@ -153,9 +164,10 @@ final class SocialChannelService
     /**
      * Reset daily post counters (called by cron at midnight).
      */
-    public function resetDailyCounters(): void
+    public function resetDailyCounters(?int $siteId = null): void
     {
-        $this->pdo->exec('UPDATE social_channels SET posts_today = 0');
+        $stmt = $this->pdo->prepare('UPDATE social_channels SET posts_today = 0 WHERE site_id = :sid');
+        $stmt->execute([':sid' => $siteId ?? currentSiteId()]);
     }
 
     /**

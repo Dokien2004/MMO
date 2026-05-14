@@ -17,10 +17,12 @@ final class ContentService
     private TaskLogService $taskLogService;
     private OpenAIContentProvider $openAIProvider;
     private GeminiContentProvider $geminiProvider;
+    private PDO $pdo;
     private string $fileName = 'generated_contents.json';
 
     public function __construct()
     {
+        $this->pdo = db_pdo();
         $this->storage = new DatabaseStorage();
         $this->productSyncService = new ProductSyncService();
         $this->affiliateLinkService = new AffiliateLinkService();
@@ -40,12 +42,17 @@ final class ContentService
             throw new InvalidArgumentException('San pham chua co affiliate link.');
         }
 
-        $contentList = $this->allContents();
-        $existing = $this->findByProductId($productId);
-        $record = $this->buildDraftRecord($product, $provider, $existing['id'] ?? $this->nextId($contentList));
+        $record = $this->storage->mutate($this->fileName, function (array $contentList) use ($product, $provider, $productId): array {
+            $existing = $this->findByProductIdInRows($contentList, $productId);
+            $record = $this->buildDraftRecord($product, $provider, $existing['id'] ?? $this->nextId($contentList));
+            $contentList = $this->upsertContent($contentList, $record);
 
-        $contentList = $this->upsertContent($contentList, $record);
-        $this->saveContents($contentList);
+            return [
+                'rows' => $this->sortContents($contentList),
+                'result' => $record,
+            ];
+        });
+
         $this->productSyncService->updateProduct($productId, [
             'status' => 'content_ready',
             'content_status' => 'draft',
@@ -132,13 +139,25 @@ final class ContentService
 
     public function summary(): array
     {
-        $contents = $this->allContents();
+        $stmt = $this->pdo->prepare(
+            'SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN status = \'draft\' THEN 1 ELSE 0 END) AS draft_count,
+                SUM(CASE WHEN status = \'approved\' THEN 1 ELSE 0 END) AS approved_count,
+                SUM(CASE WHEN status = \'rejected\' THEN 1 ELSE 0 END) AS rejected_count,
+                SUM(CASE WHEN status = \'used\' THEN 1 ELSE 0 END) AS used_count
+             FROM generated_contents
+             WHERE site_id = :site_id'
+        );
+        $stmt->execute([':site_id' => currentSiteId()]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
         return [
-            'total' => count($contents),
-            'draft' => count(array_filter($contents, static fn(array $row): bool => ($row['status'] ?? '') === 'draft')),
-            'approved' => count(array_filter($contents, static fn(array $row): bool => ($row['status'] ?? '') === 'approved')),
-            'rejected' => count(array_filter($contents, static fn(array $row): bool => ($row['status'] ?? '') === 'rejected')),
-            'used' => count(array_filter($contents, static fn(array $row): bool => ($row['status'] ?? '') === 'used')),
+            'total' => (int)($row['total'] ?? 0),
+            'draft' => (int)($row['draft_count'] ?? 0),
+            'approved' => (int)($row['approved_count'] ?? 0),
+            'rejected' => (int)($row['rejected_count'] ?? 0),
+            'used' => (int)($row['used_count'] ?? 0),
         ];
     }
 
@@ -305,48 +324,59 @@ final class ContentService
 
     public function attachMedia(int $contentId, string $mediaType, string $mediaUrl, string $mediaPrompt = '', string $mediaStatus = 'ready'): array
     {
-        $contents = $this->allContents();
-        foreach ($contents as &$content) {
-            if ((int)($content['id'] ?? 0) !== $contentId) {
-                continue;
-            }
-            $content['media_type'] = $mediaType;
-            $content['media_url'] = $mediaUrl;
-            if ($mediaPrompt !== '') {
-                $content['media_prompt'] = $mediaPrompt;
-            }
-            $content['media_status'] = $mediaStatus;
-            $content['updated_at'] = date('c');
-            $this->saveContents($contents);
-            return $content;
-        }
-        unset($content);
+        return $this->storage->mutate($this->fileName, function (array $contents) use ($contentId, $mediaType, $mediaUrl, $mediaPrompt, $mediaStatus): array {
+            foreach ($contents as &$content) {
+                if ((int)($content['id'] ?? 0) !== $contentId) {
+                    continue;
+                }
+                $content['media_type'] = $mediaType;
+                $content['media_url'] = $mediaUrl;
+                if ($mediaPrompt !== '') {
+                    $content['media_prompt'] = $mediaPrompt;
+                }
+                $content['media_status'] = $mediaStatus;
+                $content['updated_at'] = date('c');
 
-        throw new InvalidArgumentException('Khong tim thay content can gan media.');
+                return [
+                    'rows' => $this->sortContents($contents),
+                    'result' => $content,
+                ];
+            }
+            unset($content);
+
+            throw new InvalidArgumentException('Khong tim thay content can gan media.');
+        });
     }
 
     private function changeStatus(int $contentId, string $status): array
     {
-        $contents = $this->allContents();
-        foreach ($contents as &$content) {
-            if ((int)($content['id'] ?? 0) !== $contentId) {
-                continue;
-            }
-            $content['status'] = $status;
-            $content['updated_at'] = date('c');
-            $this->saveContents($contents);
-            $this->syncProductContentState((int)$content['product_id'], $status);
-            $this->taskLogService->create('content_status_change', 'success', [
-                'content_id' => $contentId,
-                'status' => $status,
-            ], [
-                'product_id' => (int)$content['product_id'],
-            ]);
-            return $content;
-        }
-        unset($content);
+        $content = $this->storage->mutate($this->fileName, function (array $contents) use ($contentId, $status): array {
+            foreach ($contents as &$content) {
+                if ((int)($content['id'] ?? 0) !== $contentId) {
+                    continue;
+                }
+                $content['status'] = $status;
+                $content['updated_at'] = date('c');
 
-        throw new InvalidArgumentException('Khong tim thay content can cap nhat trang thai.');
+                return [
+                    'rows' => $this->sortContents($contents),
+                    'result' => $content,
+                ];
+            }
+            unset($content);
+
+            throw new InvalidArgumentException('Khong tim thay content can cap nhat trang thai.');
+        });
+
+        $this->syncProductContentState((int)$content['product_id'], $status);
+        $this->taskLogService->create('content_status_change', 'success', [
+            'content_id' => $contentId,
+            'status' => $status,
+        ], [
+            'product_id' => (int)$content['product_id'],
+        ]);
+
+        return $content;
     }
 
     private function syncProductContentState(int $productId, string $contentStatus): void
@@ -364,12 +394,7 @@ final class ContentService
 
     private function findByProductId(int $productId): ?array
     {
-        foreach ($this->allContents() as $content) {
-            if ((int)($content['product_id'] ?? 0) === $productId) {
-                return $content;
-            }
-        }
-        return null;
+        return $this->findByProductIdInRows($this->allContents(), $productId);
     }
 
     private function upsertContent(array $contents, array $record): array
@@ -389,14 +414,31 @@ final class ContentService
 
     private function saveContents(array $contents): void
     {
-        usort($contents, static function (array $left, array $right): int {
-            return strcmp((string)($right['updated_at'] ?? ''), (string)($left['updated_at'] ?? ''));
-        });
-        $this->storage->write($this->fileName, $contents);
+        $this->storage->write($this->fileName, $this->sortContents($contents));
     }
 
     private function nextId(array $contents): int
     {
-        return $this->storage->nextId($this->fileName);
+        return $this->storage->nextIdForRows($contents);
+    }
+
+    private function findByProductIdInRows(array $contents, int $productId): ?array
+    {
+        foreach ($contents as $content) {
+            if ((int)($content['product_id'] ?? 0) === $productId) {
+                return $content;
+            }
+        }
+
+        return null;
+    }
+
+    private function sortContents(array $contents): array
+    {
+        usort($contents, static function (array $left, array $right): int {
+            return strcmp((string)($right['updated_at'] ?? ''), (string)($left['updated_at'] ?? ''));
+        });
+
+        return $contents;
     }
 }

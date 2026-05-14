@@ -6,7 +6,7 @@ declare(strict_types=1);
  * Auto Publish Cron Job — Multi-channel
  *
  * Usage: php cron_jobs/auto_publish.php
- * Cron expression: */15 * * * * (Run every 15 minutes)
+ * Cron expression: every 15 minutes
  *
  * This script orchestrates the posting flow:
  * 1. Checks for contents that are 'ready' but not yet scheduled.
@@ -18,7 +18,12 @@ declare(strict_types=1);
 define('CRON_JOB', true);
 require_once dirname(__DIR__) . '/backend/app/bootstrap.php';
 
+$options = getopt('', ['site::']);
+$siteId = max(1, (int)($options['site'] ?? ($_SESSION['site_id'] ?? APP_SITE_ID)));
+$_SESSION['site_id'] = $siteId;
+
 echo "[Cron] Auto Publish Started: " . date('Y-m-d H:i:s') . "\n";
+echo "[Cron] Site: {$siteId}\n";
 
 try {
     $channelService = new SocialChannelService();
@@ -27,11 +32,11 @@ try {
     $taskLogService = new TaskLogService();
 
     // 1. Reset daily limits if it's the start of a new day
-    $lastResetFile = STORAGE_PATH . '/tmp/last_daily_reset.txt';
+    $lastResetFile = STORAGE_PATH . '/tmp/last_daily_reset_site_' . $siteId . '.txt';
     $today = date('Y-m-d');
     $lastReset = is_file($lastResetFile) ? file_get_contents($lastResetFile) : '';
     if ($lastReset !== $today) {
-        $channelService->resetDailyCounters();
+        $channelService->resetDailyCounters($siteId);
         file_put_contents($lastResetFile, $today);
         echo "[Cron] Daily channel counters reset.\n";
     }
@@ -76,7 +81,12 @@ try {
         }
 
         // Schedule it for now (or soon)
-        $postingService->schedulePost((int)$content['id'], $selectedChannel['channel_type']);
+        $postingService->schedulePost(
+            (int)$content['id'],
+            $selectedChannel['channel_type'],
+            null,
+            (int)$selectedChannel['id']
+        );
         echo "[Cron] Scheduled content #" . $content['id'] . " for channel " . $selectedChannel['channel_type'] . "\n";
         $scheduledCount++;
     }
@@ -97,10 +107,20 @@ try {
         // We match by channel_type since schedulePost only stores type currently.
         // We pick the first active channel of that type that has capacity.
         $targetChannel = null;
-        foreach ($activeChannels as $channel) {
-            if ($channel['channel_type'] === $post['channel'] && $channelService->canPostToday((int)$channel['id'])) {
-                $targetChannel = $channel;
-                break;
+        $boundChannelId = (int)($post['social_channel_id'] ?? 0);
+        if ($boundChannelId > 0) {
+            $boundChannel = $channelService->findById($boundChannelId);
+            if ($boundChannel && $boundChannel['channel_type'] === $post['channel'] && $channelService->canPostToday($boundChannelId)) {
+                $targetChannel = $boundChannel;
+            }
+        }
+
+        if ($targetChannel === null) {
+            foreach ($activeChannels as $channel) {
+                if ($channel['channel_type'] === $post['channel'] && $channelService->canPostToday((int)$channel['id'])) {
+                    $targetChannel = $channel;
+                    break;
+                }
             }
         }
 
