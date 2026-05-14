@@ -1,180 +1,317 @@
-CREATE DATABASE IF NOT EXISTS mmo_affiliate CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE mmo_affiliate;
+-- MMO Database Schema
+-- Generated: 2026-05-14 12:34:31
+-- Database: mmo_affiliate
 
-SET NAMES utf8mb4;
-SET time_zone = '+07:00';
-
-CREATE TABLE IF NOT EXISTS affiliate_products (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    site_id INT NOT NULL DEFAULT 1,
-    source_platform VARCHAR(50) NOT NULL,
-    source_product_id VARCHAR(100) NOT NULL,
-    product_name VARCHAR(255) NOT NULL,
-    product_url VARCHAR(1000) NOT NULL,
-    price DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    sold_count INT UNSIGNED NOT NULL DEFAULT 0,
-    status VARCHAR(50) NOT NULL DEFAULT 'new',
-    notes TEXT NULL,
-    affiliate_url VARCHAR(2000) NOT NULL DEFAULT '',
-    content_status VARCHAR(50) NOT NULL DEFAULT 'none',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_products_site_source (site_id, source_platform, source_product_id),
-    KEY idx_products_site_status (site_id, status),
-    KEY idx_products_site_content_status (site_id, content_status),
-    KEY idx_products_sold_count (site_id, sold_count),
-    KEY idx_products_updated_at (updated_at),
-    CONSTRAINT chk_products_status CHECK (status IN ('new', 'linked', 'content_ready', 'posted', 'archived')),
-    CONSTRAINT chk_products_content_status CHECK (content_status IN ('none', 'draft', 'approved', 'rejected', 'used')),
-    CONSTRAINT chk_products_price_non_negative CHECK (price >= 0),
-    CONSTRAINT chk_products_sold_count_non_negative CHECK (sold_count >= 0)
+-- Table: affiliate_links
+DROP TABLE IF EXISTS `affiliate_links`;
+CREATE TABLE `affiliate_links` (
+  `id` bigint(20) unsigned NOT NULL,
+  `site_id` int(11) NOT NULL DEFAULT 1,
+  `product_id` bigint(20) unsigned NOT NULL,
+  `source_platform` varchar(50) NOT NULL,
+  `original_url` varchar(1000) NOT NULL,
+  `affiliate_url` varchar(2000) NOT NULL,
+  `campaign_code` varchar(100) DEFAULT 'MVP-LAPTOP',
+  `status` varchar(50) DEFAULT 'active',
+  `created_at` varchar(40) NOT NULL,
+  `updated_at` varchar(40) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_product_status` (`product_id`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS affiliate_links (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    site_id INT NOT NULL DEFAULT 1,
-    product_id BIGINT UNSIGNED NOT NULL,
-    source_platform VARCHAR(50) NOT NULL,
-    original_url VARCHAR(1000) NOT NULL,
-    affiliate_url VARCHAR(2000) NOT NULL,
-    campaign_code VARCHAR(100) NOT NULL DEFAULT 'MVP-LAPTOP',
-    status VARCHAR(50) NOT NULL DEFAULT 'active',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_links_site_product (site_id, product_id),
-    KEY idx_links_site_status (site_id, status),
-    KEY idx_links_campaign (campaign_code),
-    KEY idx_links_updated_at (updated_at),
-    CONSTRAINT fk_links_product
-        FOREIGN KEY (product_id) REFERENCES affiliate_products (id)
-        ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT chk_links_status CHECK (status IN ('active', 'expired', 'error'))
+-- Table: affiliate_products
+DROP TABLE IF EXISTS `affiliate_products`;
+CREATE TABLE `affiliate_products` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int(11) NOT NULL DEFAULT 1,
+  `source_platform` varchar(50) NOT NULL,
+  `source_product_id` varchar(100) NOT NULL,
+  `product_name` varchar(255) NOT NULL,
+  `product_url` varchar(1000) NOT NULL,
+  `price` decimal(15,2) DEFAULT 0.00,
+  `sold_count` int(10) unsigned NOT NULL DEFAULT 0,
+  `status` varchar(50) DEFAULT 'new',
+  `notes` text DEFAULT NULL,
+  `affiliate_url` varchar(2000) DEFAULT '',
+  `content_status` varchar(50) DEFAULT 'none',
+  `created_at` varchar(40) NOT NULL,
+  `updated_at` varchar(40) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_source_product` (`source_platform`,`source_product_id`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB AUTO_INCREMENT=121 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table: affiliate_task_logs
+DROP TABLE IF EXISTS `affiliate_task_logs`;
+CREATE TABLE `affiliate_task_logs` (
+  `id` bigint(20) unsigned NOT NULL,
+  `site_id` int(11) NOT NULL DEFAULT 1,
+  `task_name` varchar(150) NOT NULL,
+  `status` varchar(50) DEFAULT 'pending',
+  `payload` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`payload`)),
+  `result_payload` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`result_payload`)),
+  `error_message` text DEFAULT NULL,
+  `created_at` varchar(40) NOT NULL,
+  `updated_at` varchar(40) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_task_status` (`task_name`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS product_market_snapshots (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    site_id INT NOT NULL DEFAULT 1,
-    product_id BIGINT UNSIGNED NOT NULL,
-    source_platform VARCHAR(50) NOT NULL,
-    source_product_id VARCHAR(100) NOT NULL,
-    price DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    sold_count INT UNSIGNED NOT NULL DEFAULT 0,
-    review_count INT UNSIGNED NOT NULL DEFAULT 0,
-    rating DECIMAL(3,2) NOT NULL DEFAULT 0.00,
-    captured_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    KEY idx_market_snapshots_product_time (site_id, product_id, captured_at),
-    KEY idx_market_snapshots_source_time (site_id, source_platform, source_product_id, captured_at),
-    CONSTRAINT fk_market_snapshots_product
-        FOREIGN KEY (product_id) REFERENCES affiliate_products (id)
-        ON DELETE CASCADE ON UPDATE CASCADE
+-- Table: audit_logs
+DROP TABLE IF EXISTS `audit_logs`;
+CREATE TABLE `audit_logs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` int(10) unsigned DEFAULT NULL,
+  `action` varchar(50) NOT NULL COMMENT 'LOGIN, LOGOUT, SCRAPER_RUN, SETTINGS_UPDATE...',
+  `target_table` varchar(100) DEFAULT NULL,
+  `target_id` varchar(50) DEFAULT NULL,
+  `details` text DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_user_action` (`user_id`,`action`),
+  KEY `idx_created` (`created_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=50 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table: automation_settings
+DROP TABLE IF EXISTS `automation_settings`;
+CREATE TABLE `automation_settings` (
+  `site_id` int(11) NOT NULL,
+  `default_campaign_code` varchar(100) NOT NULL DEFAULT 'MVP-LAPTOP',
+  `default_content_provider` varchar(50) NOT NULL DEFAULT 'template_engine',
+  `default_channel` varchar(50) NOT NULL DEFAULT 'fanpage_manual',
+  `sync_limit` int(11) NOT NULL DEFAULT 10,
+  `min_sold_count` int(11) NOT NULL DEFAULT 50,
+  `top_selling_only` tinyint(1) NOT NULL DEFAULT 1,
+  `auto_approve` tinyint(1) NOT NULL DEFAULT 1,
+  `auto_schedule` tinyint(1) NOT NULL DEFAULT 1,
+  `auto_publish` tinyint(1) NOT NULL DEFAULT 0,
+  `publish_interval_minutes` int(11) NOT NULL DEFAULT 15,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`site_id`),
+  CONSTRAINT `chk_settings_channel` CHECK (`default_channel` in ('fanpage_manual','fanpage_api')),
+  CONSTRAINT `chk_settings_sync_limit` CHECK (`sync_limit` >= 1),
+  CONSTRAINT `chk_settings_min_sold_count` CHECK (`min_sold_count` >= 0),
+  CONSTRAINT `chk_settings_publish_interval` CHECK (`publish_interval_minutes` >= 5),
+  CONSTRAINT `chk_settings_provider` CHECK (`default_content_provider` in ('template_engine','openai','gemini','auto'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS generated_contents (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    site_id INT NOT NULL DEFAULT 1,
-    product_id BIGINT UNSIGNED NOT NULL,
-    affiliate_link_id BIGINT UNSIGNED NULL,
-    title VARCHAR(255) NOT NULL,
-    body TEXT NOT NULL,
-    hashtags VARCHAR(1000) NOT NULL DEFAULT '',
-    call_to_action VARCHAR(500) NOT NULL DEFAULT '',
-    ai_provider VARCHAR(50) NOT NULL DEFAULT 'template_engine',
-    media_type VARCHAR(20) NOT NULL DEFAULT 'none',
-    media_url VARCHAR(2000) NOT NULL DEFAULT '',
-    media_prompt TEXT NULL,
-    media_status VARCHAR(30) NOT NULL DEFAULT 'none',
-    status VARCHAR(50) NOT NULL DEFAULT 'draft',
-    notes TEXT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_contents_site_product (site_id, product_id),
-    KEY idx_contents_site_status (site_id, status),
-    KEY idx_contents_provider (ai_provider),
-    KEY idx_contents_updated_at (updated_at),
-    CONSTRAINT fk_contents_product
-        FOREIGN KEY (product_id) REFERENCES affiliate_products (id)
-        ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT fk_contents_link
-        FOREIGN KEY (affiliate_link_id) REFERENCES affiliate_links (id)
-        ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT chk_contents_status CHECK (status IN ('draft', 'approved', 'rejected', 'used'))
+-- Table: cron_job_logs
+DROP TABLE IF EXISTS `cron_job_logs`;
+CREATE TABLE `cron_job_logs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `site_id` int(11) NOT NULL,
+  `job_name` varchar(100) NOT NULL,
+  `status` enum('running','success','partial','failed') NOT NULL DEFAULT 'running',
+  `started_at` datetime NOT NULL,
+  `finished_at` datetime DEFAULT NULL,
+  `result` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`result`)),
+  PRIMARY KEY (`id`),
+  KEY `idx_site_job` (`site_id`,`job_name`),
+  KEY `idx_started` (`started_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Table: generated_contents
+DROP TABLE IF EXISTS `generated_contents`;
+CREATE TABLE `generated_contents` (
+  `id` bigint(20) unsigned NOT NULL,
+  `site_id` int(11) NOT NULL DEFAULT 1,
+  `product_id` bigint(20) unsigned NOT NULL,
+  `affiliate_link_id` bigint(20) unsigned DEFAULT NULL,
+  `title` varchar(255) NOT NULL,
+  `body` text NOT NULL,
+  `hashtags` varchar(1000) DEFAULT '',
+  `call_to_action` varchar(500) DEFAULT '',
+  `ai_provider` varchar(50) DEFAULT 'template_engine',
+  `media_type` varchar(20) NOT NULL DEFAULT 'none',
+  `media_url` varchar(2000) NOT NULL DEFAULT '',
+  `media_prompt` text DEFAULT NULL,
+  `media_status` varchar(30) NOT NULL DEFAULT 'none',
+  `status` varchar(50) DEFAULT 'draft',
+  `notes` text DEFAULT NULL,
+  `created_at` varchar(40) NOT NULL,
+  `updated_at` varchar(40) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_product_status` (`product_id`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS scheduled_posts (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    site_id INT NOT NULL DEFAULT 1,
-    content_id BIGINT UNSIGNED NOT NULL,
-    product_id BIGINT UNSIGNED NOT NULL,
-    channel VARCHAR(50) NOT NULL,
-    scheduled_at DATETIME NULL,
-    posted_at DATETIME NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
-    result_note TEXT NULL,
-    remote_post_id VARCHAR(255) NOT NULL DEFAULT '',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_posts_site_content (site_id, content_id),
-    KEY idx_posts_site_status_schedule (site_id, status, scheduled_at),
-    KEY idx_posts_channel_status (channel, status),
-    KEY idx_posts_product (product_id),
-    CONSTRAINT fk_posts_content
-        FOREIGN KEY (content_id) REFERENCES generated_contents (id)
-        ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT fk_posts_product
-        FOREIGN KEY (product_id) REFERENCES affiliate_products (id)
-        ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT chk_posts_status CHECK (status IN ('scheduled', 'success', 'failed'))
+-- Table: permissions
+DROP TABLE IF EXISTS `permissions`;
+CREATE TABLE `permissions` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `code` varchar(100) NOT NULL,
+  `name` varchar(200) NOT NULL,
+  `module_code` varchar(50) DEFAULT NULL COMMENT 'Link tới system_modules.code',
+  `sort_order` int(11) NOT NULL DEFAULT 99,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_perm_code` (`code`),
+  KEY `idx_module` (`module_code`)
+) ENGINE=InnoDB AUTO_INCREMENT=1218 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table: product_market_snapshots
+DROP TABLE IF EXISTS `product_market_snapshots`;
+CREATE TABLE `product_market_snapshots` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int(11) NOT NULL DEFAULT 1,
+  `product_id` bigint(20) unsigned NOT NULL,
+  `source_platform` varchar(50) NOT NULL,
+  `source_product_id` varchar(100) NOT NULL,
+  `price` decimal(15,2) NOT NULL DEFAULT 0.00,
+  `sold_count` int(10) unsigned NOT NULL DEFAULT 0,
+  `review_count` int(10) unsigned NOT NULL DEFAULT 0,
+  `rating` decimal(3,2) NOT NULL DEFAULT 0.00,
+  `captured_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_market_snapshots_product_time` (`site_id`,`product_id`,`captured_at`),
+  KEY `idx_market_snapshots_source_time` (`site_id`,`source_platform`,`source_product_id`,`captured_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=340 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table: role_permissions
+DROP TABLE IF EXISTS `role_permissions`;
+CREATE TABLE `role_permissions` (
+  `role_id` int(10) unsigned NOT NULL,
+  `permission_id` int(10) unsigned NOT NULL,
+  PRIMARY KEY (`role_id`,`permission_id`),
+  KEY `fk_rp_perm` (`permission_id`),
+  CONSTRAINT `fk_rp_perm` FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_rp_role` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS affiliate_task_logs (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    site_id INT NOT NULL DEFAULT 1,
-    task_name VARCHAR(150) NOT NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'pending',
-    payload JSON NULL,
-    result_payload JSON NULL,
-    error_message TEXT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    KEY idx_logs_site_task_status (site_id, task_name, status),
-    KEY idx_logs_created_at (created_at),
-    CONSTRAINT chk_task_logs_status CHECK (status IN ('pending', 'success', 'failed'))
+-- Table: roles
+DROP TABLE IF EXISTS `roles`;
+CREATE TABLE `roles` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `code` varchar(30) NOT NULL COMMENT 'admin, operator, viewer',
+  `name` varchar(100) NOT NULL COMMENT 'Quản trị viên, Vận hành, Xem',
+  `description` varchar(255) DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_role_code` (`code`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table: scheduled_posts
+DROP TABLE IF EXISTS `scheduled_posts`;
+CREATE TABLE `scheduled_posts` (
+  `id` bigint(20) unsigned NOT NULL,
+  `site_id` int(11) NOT NULL DEFAULT 1,
+  `content_id` bigint(20) unsigned NOT NULL,
+  `product_id` bigint(20) unsigned NOT NULL,
+  `channel` varchar(50) NOT NULL,
+  `scheduled_at` varchar(40) DEFAULT NULL,
+  `posted_at` varchar(40) DEFAULT NULL,
+  `status` varchar(50) DEFAULT 'scheduled',
+  `result_note` text DEFAULT NULL,
+  `remote_post_id` varchar(255) DEFAULT '',
+  `created_at` varchar(40) NOT NULL,
+  `updated_at` varchar(40) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_content_status` (`content_id`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS automation_settings (
-    site_id INT NOT NULL,
-    default_campaign_code VARCHAR(100) NOT NULL DEFAULT 'MVP-LAPTOP',
-    default_content_provider VARCHAR(50) NOT NULL DEFAULT 'template_engine',
-    default_channel VARCHAR(50) NOT NULL DEFAULT 'fanpage_manual',
-    sync_limit INT NOT NULL DEFAULT 10,
-    min_sold_count INT NOT NULL DEFAULT 50,
-    top_selling_only TINYINT(1) NOT NULL DEFAULT 1,
-    auto_approve TINYINT(1) NOT NULL DEFAULT 1,
-    auto_schedule TINYINT(1) NOT NULL DEFAULT 1,
-    auto_publish TINYINT(1) NOT NULL DEFAULT 0,
-    publish_interval_minutes INT NOT NULL DEFAULT 15,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (site_id),
-    CONSTRAINT chk_settings_provider CHECK (default_content_provider IN ('template_engine', 'openai', 'gemini', 'auto')),
-    CONSTRAINT chk_settings_channel CHECK (default_channel IN ('fanpage_manual', 'fanpage_api')),
-    CONSTRAINT chk_settings_sync_limit CHECK (sync_limit >= 1),
-    CONSTRAINT chk_settings_min_sold_count CHECK (min_sold_count >= 0),
-    CONSTRAINT chk_settings_publish_interval CHECK (publish_interval_minutes >= 5)
+-- Table: scraper_configs
+DROP TABLE IF EXISTS `scraper_configs`;
+CREATE TABLE `scraper_configs` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int(11) NOT NULL DEFAULT 1,
+  `keyword` varchar(255) NOT NULL,
+  `platform` varchar(50) NOT NULL DEFAULT 'shopee',
+  `min_sold_count` int(10) unsigned NOT NULL DEFAULT 100,
+  `max_pages` tinyint(3) unsigned NOT NULL DEFAULT 3,
+  `sort_by` varchar(20) NOT NULL DEFAULT 'sold',
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `last_run_at` datetime DEFAULT NULL,
+  `last_run_result` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`last_run_result`)),
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_scraper_site_active` (`site_id`,`is_active`),
+  KEY `idx_scraper_platform` (`platform`)
+) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table: site_integration_configs
+DROP TABLE IF EXISTS `site_integration_configs`;
+CREATE TABLE `site_integration_configs` (
+  `site_id` int(10) unsigned NOT NULL,
+  `config_key` varchar(100) NOT NULL,
+  `config_value` text DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`site_id`,`config_key`),
+  KEY `idx_site_integration_configs_key` (`config_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS site_integration_configs (
-    site_id INT UNSIGNED NOT NULL,
-    config_key VARCHAR(100) NOT NULL,
-    config_value TEXT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (site_id, config_key),
-    KEY idx_site_integration_configs_key (config_key)
+-- Table: sites
+DROP TABLE IF EXISTS `sites`;
+CREATE TABLE `sites` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `code` varchar(30) NOT NULL,
+  `name` varchar(150) NOT NULL,
+  `address` varchar(500) DEFAULT NULL,
+  `parent_site_id` int(10) unsigned DEFAULT NULL,
+  `is_master` tinyint(1) NOT NULL DEFAULT 0,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_site_code` (`code`),
+  KEY `idx_sites_parent` (`parent_site_id`),
+  KEY `idx_sites_active` (`is_active`),
+  CONSTRAINT `fk_sites_parent` FOREIGN KEY (`parent_site_id`) REFERENCES `sites` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table: system_modules
+DROP TABLE IF EXISTS `system_modules`;
+CREATE TABLE `system_modules` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `code` varchar(50) NOT NULL,
+  `name` varchar(100) NOT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `icon` varchar(50) NOT NULL DEFAULT 'bi-cube',
+  `is_enabled` tinyint(1) NOT NULL DEFAULT 1,
+  `sort_order` int(11) NOT NULL DEFAULT 99,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_module_code` (`code`)
+) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table: user_site_access
+DROP TABLE IF EXISTS `user_site_access`;
+CREATE TABLE `user_site_access` (
+  `user_id` int(10) unsigned NOT NULL,
+  `site_id` int(10) unsigned NOT NULL,
+  `is_default` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`user_id`,`site_id`),
+  KEY `idx_user_site_default` (`user_id`,`is_default`),
+  KEY `fk_usa_site` (`site_id`),
+  CONSTRAINT `fk_usa_site` FOREIGN KEY (`site_id`) REFERENCES `sites` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_usa_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table: users
+DROP TABLE IF EXISTS `users`;
+CREATE TABLE `users` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `username` varchar(50) NOT NULL,
+  `email` varchar(150) NOT NULL,
+  `password_hash` varchar(255) NOT NULL,
+  `full_name` varchar(100) NOT NULL DEFAULT '',
+  `role_id` int(10) unsigned NOT NULL DEFAULT 2 COMMENT 'FK roles — default operator',
+  `site_id` int(10) unsigned NOT NULL DEFAULT 1,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `avatar_url` varchar(500) DEFAULT NULL,
+  `login_attempts` int(11) NOT NULL DEFAULT 0,
+  `locked_until` datetime DEFAULT NULL COMMENT 'Khóa tạm sau 5 lần sai',
+  `last_login_at` datetime DEFAULT NULL,
+  `last_login_ip` varchar(45) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_username` (`username`),
+  UNIQUE KEY `uk_email` (`email`),
+  KEY `fk_user_role` (`role_id`),
+  CONSTRAINT `fk_user_role` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

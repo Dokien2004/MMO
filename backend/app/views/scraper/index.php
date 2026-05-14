@@ -162,8 +162,40 @@ for ($i = 0; $i < count($priceDataK); $i++) { $scatterData[] = ['x' => $priceDat
 
 <!-- Radar search -->
 <div class="card" style="margin-bottom:20px;border-left:4px solid #22c55e">
-    <div class="card-title" style="font-size:15px">Phân tích ngành moi</div>
-    <p class="text-muted text-sm" style="margin-bottom:14px">Nhập từ khóa/ngành để crawl mau tu Shopee roi cham diem nhu cau.</p>
+    <div class="card-title" style="font-size:15px">Thu thập từ URL bất kỳ</div>
+    <p class="text-muted text-sm" style="margin-bottom:14px">Dán URL từ bất kỳ nguồn nào — AI tự nhận diện và trích xuất sản phẩm.</p>
+    <form data-ajax method="POST" action="<?= url('/scraper/scrape-url') ?>" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div class="form-group" style="flex:2;min-width:240px;margin-bottom:0">
+            <label class="form-label">URL nguồn</label>
+            <input class="form-control" name="url" placeholder="https://... (Shopee, Tiki, Lazada, hoặc bất kỳ trang nào)">
+        </div>
+        <div class="form-group" style="flex:1;min-width:120px;margin-bottom:0">
+            <label class="form-label">Giới hạn</label>
+            <input class="form-control" name="limit" type="number" value="100" min="10" max="200">
+        </div>
+        <div style="margin-bottom:0">
+            <button type="submit" class="btn btn-primary">Thu thập</button>
+        </div>
+    </form>
+</div>
+
+<div class="card" style="margin-bottom:20px;border-left:4px solid #8b5cf6">
+    <div class="card-title" style="font-size:15px">Dán dữ liệu thô</div>
+    <p class="text-muted text-sm" style="margin-bottom:14px">Dán text, CSV, HTML table — AI tự trích xuất sản phẩm và lưu vào DB.</p>
+    <form data-ajax method="POST" action="<?= url('/scraper/parse-raw') ?>" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">
+        <div class="form-group" style="flex:1;min-width:280px;margin-bottom:0">
+            <label class="form-label">Dữ liệu thô (text/CSV/HTML)</label>
+            <textarea class="form-control" name="raw" rows="5" placeholder="Dán dữ liệu sản phẩm ở đây..."></textarea>
+        </div>
+        <div class="form-group" style="flex:0;margin-bottom:0">
+            <label class="form-label">Nguồn</label>
+            <input class="form-control" name="platform" value="manual" placeholder="VD: shopee, tiki, manual">
+        </div>
+        <div style="flex:0;margin-top:24px">
+            <button type="submit" class="btn btn-primary">Trích xuất</button>
+        </div>
+    </form>
+</div>
     <form data-ajax method="POST" action="<?= url('/scraper/radar') ?>" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
         <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
             <label class="form-label">Ngành / Từ khóa</label>
@@ -177,70 +209,6 @@ for ($i = 0; $i < count($priceDataK); $i++) { $scatterData[] = ['x' => $priceDat
             <button type="submit" class="btn btn-primary">Phân tích</button>
         </div>
     </form>
-</div>
-
-<!-- Tools -->
-<div class="card" id="tools" style="margin-bottom:20px">
-    <div class="card-title" style="font-size:15px">Công cụ thực tế</div>
-    <p class="text-muted text-sm" style="margin-bottom:16px">Dùng trực tiếp các công cụ de phân tích thị trường, cai thien crawler va Dashboard.</p>
-    <div class="tools-grid">
-        <a class="tool-card" href="https://github.com/dtungpka/shopee-scraper" target="_blank">
-            <div class="tool-name">dtungpka/shopee-scraper</div>
-            <div class="tool-desc">Lay product + review Shopee bang Python Selenium/Playwright.</div>
-            <span class="tool-tag">Python Scraping</span>
-        </a>
-        <a class="tool-card" href="https://github.com/AvazAsgarov/streamlit-e-commerce-dashboard" target="_blank">
-            <div class="tool-name">streamlit-e-commerce-dashboard</div>
-            <div class="tool-desc">Dashboard phân tích sales data bang Streamlit + Pandas.</div>
-            <span class="tool-tag">Python Dashboard</span>
-        </a>
-        <a class="tool-card" href="https://github.com/GbollyAnaltic/ecommerce-dashboard" target="_blank">
-            <div class="tool-name">ecommerce-dashboard</div>
-            <div class="tool-desc">Interactive realtime dashboard bang Streamlit.</div>
-            <span class="tool-tag">Streamlit Analytics</span>
-        </a>
-        <a class="tool-card" href="https://kameleo.io/blog/shopee-scraper-toolkit" target="_blank">
-            <div class="tool-name">Kameleo Shopee Guide</div>
-            <div class="tool-desc">Huong dan scrape Shopee voi anti-detect browser.</div>
-            <span class="tool-tag">Anti-detect Guide</span>
-        </a>
-        <a class="tool-card" href="https://github.com/CloakHQ/CloakBrowser" target="_blank">
-            <div class="tool-name">CloakBrowser</div>
-            <div class="tool-desc">Chromium stealth hien dung trong he thong, tranh bi phat hien.</div>
-            <span class="tool-tag">Node.js Anti-detect</span>
-        </a>
-        <a class="tool-card" href="<?= url('/settings/integrations') ?>">
-            <div class="tool-name">Cấu hình tich hop</div>
-            <div class="tool-desc">Quản lý API keys Kling, MeiGen, Facebook, Telegram.</div>
-            <span class="tool-tag">Settings</span>
-        </a>
-        <a class="tool-card" href="https://grafana.com/docs/grafana/latest/dashboards/" target="_blank">
-            <div class="tool-name">Grafana Dashboards</div>
-            <div class="tool-desc">Xem bieu do truc tiep. Khởi động: <code>docker compose -f docker-compose.analytics.yml up -d</code></div>
-            <span class="tool-tag">Analytics</span>
-        </a>
-        <a class="tool-card" href="https://github.com/topics/ecommerce-analysis" target="_blank">
-            <div class="tool-name">GitHub Topics: ecommerce-analysis</div>
-            <div class="tool-desc">Tim them repo phân tích du lieu thị trường tren GitHub.</div>
-            <span class="tool-tag">GitHub Topics</span>
-        </a>
-    </div>
-</div>
-
-<!-- Grafana info -->
-<div class="card" style="margin-bottom:20px;border-left:4px solid #8b5cf6">
-    <div class="card-title" style="font-size:15px">Grafana Dashboard</div>
-    <p class="text-muted text-sm" style="margin-bottom:12px">Khởi động Grafana roi truy cap bieu do truc tuyen:</p>
-    <pre>docker compose -f docker-compose.analytics.yml up -d
-# Truy cập: http://127.0.0.1:3000</pre>
-    <p class="text-sm text-muted" style="margin-bottom:8px">Query mau Grafana - Top products by run-rate 7 ngay:</p>
-    <pre>SELECT p.product_name,
-  MAX(s.sold_count)-MIN(s.sold_count) AS sold_delta_7d,
-  ROUND((MAX(s.sold_count)-MIN(s.sold_count))/GREATEST(1,TIMESTAMPDIFF(DAY,MIN(s.captured_at),MAX(s.captured_at))),2) AS run_rate_per_day
-FROM product_market_snapshots s
-JOIN affiliate_products p ON p.id=s.product_id AND p.site_id=s.site_id
-WHERE s.site_id=1 AND s.captured_at>=NOW()-INTERVAL 7 DAY
-GROUP BY p.id ORDER BY run_rate_per_day DESC LIMIT 20</pre>
 </div>
 
 <script>

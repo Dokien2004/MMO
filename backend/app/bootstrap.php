@@ -29,3 +29,5 @@ require_once __DIR__ . '/services/ServerInfoService.php';
 require_once __DIR__ . '/services/TelegramService.php';
 require_once __DIR__ . '/services/PendingScrapeJobService.php';
 require_once __DIR__ . '/services/ScraperService.php';
+require_once __DIR__ . '/services/AIKeywordService.php';
+require_once __DIR__ . '/services/AutoCrawlService.php';

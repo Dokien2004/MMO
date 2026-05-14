@@ -685,7 +685,36 @@ if ($method === 'POST') {
                 json_response(true, 'Đã phân tích ' . (int)$radar['count'] . ' cơ hội sản phẩm tiềm năng.', ['data' => $radar]);
                 break;
 
-            // ── Admin: Module toggle ──
+            // ── Scrape any URL (AI extracts products from any source) ──
+            case '/scraper/scrape-url':
+                requirePermission('scraper.view');
+                $url = trim((string)($_POST['url'] ?? ''));
+                $platform = trim((string)($_POST['platform'] ?? 'generic'));
+                $limit = min(200, max(10, (int)($_POST['limit'] ?? 100)));
+                if ($url === '') {
+                    json_response(false, 'URL không được để trống.');
+                }
+                $svc = new UniversalScraperService();
+                $result = $svc->scrapeUrl($url, $platform ?: 'generic', $limit);
+                $taskLogService->create('universal_scrape', 'success', ['url' => $url, 'platform' => $platform], $result);
+                json_response(true, 'Đã thu thập ' . $result['saved'] . ' sản phẩm.', $result);
+                break;
+
+            // ── Parse pasted raw data (CSV/text/HTML) with AI ──
+            case '/scraper/parse-raw':
+                requirePermission('scraper.view');
+                $raw = trim((string)($_POST['raw'] ?? ''));
+                $platform = trim((string)($_POST['platform'] ?? 'manual'));
+                if ($raw === '') {
+                    json_response(false, 'Dữ liệu thô không được để trống.');
+                }
+                $svc = new UniversalScraperService();
+                $result = $svc->parseRawData($raw, $platform ?: 'manual');
+                $taskLogService->create('raw_parse', 'success', ['platform' => $platform], $result);
+                json_response(true, 'Đã trích xuất ' . $result['saved'] . ' sản phẩm.', $result);
+                break;
+
+
             case '/admin/modules/toggle':
                 $moduleId = (int)($_POST['module_id'] ?? 0);
                 $enabled = (bool)($_POST['enabled'] ?? false);
@@ -822,11 +851,21 @@ switch ($path) {
         break;
 
     case '/products':
+        requirePermission('products.view');
+        // Đọc từ bảng affiliate_products (dữ liệu cào từ Tiki/Shopee/etc)
+        $dbProducts = $pdo->query(
+            "SELECT * FROM affiliate_products WHERE site_id = " . (int)currentSiteId() . " ORDER BY sold_count DESC, id DESC"
+        )->fetchAll(PDO::FETCH_ASSOC);
+        $productSummary = [
+            'total' => count($dbProducts),
+            'with_link' => count(array_filter($dbProducts, fn($p) => !empty($p['affiliate_url'] ?? ''))),
+            'hot' => count(array_filter($dbProducts, fn($p) => (int)($p['sold_count'] ?? 0) >= 50)),
+        ];
         render('products/index', [
             'pageTitle'      => 'Sản phẩm',
             'currentPage'    => 'products',
-            'productSummary' => $productSyncService->dashboardSummary(),
-            'products'       => $productSyncService->allProducts(),
+            'productSummary' => $productSummary,
+            'products'       => $dbProducts,
         ]);
         break;
 
