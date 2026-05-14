@@ -117,6 +117,7 @@ requireAuth();
 
 // ── Initialize services (only for authenticated requests) ──
 $productSyncService = new ProductSyncService();
+$userSelectedProductService = new UserSelectedProductService();
 $taskLogService = new TaskLogService();
 $siteService = new SiteService();
 $linkService = new AffiliateLinkService();
@@ -571,6 +572,30 @@ if ($method === 'POST') {
                 $platform = trim((string)($_POST['platform'] ?? 'manual'));
                 $result = $productSyncService->importProductsFromFile((string)$file['tmp_name'], (string)$file['name'], $platform);
                 json_response(true, 'Đã import ' . $result['summary']['received_count'] . ' sản phẩm. Thêm mới: ' . $result['summary']['inserted_count'] . ', cập nhật: ' . $result['summary']['updated_count'] . '.', ['data' => $result['summary']]);
+                break;
+
+            case '/products/select':
+                // Thêm/cập nhật sản phẩm vào bảng chọn lọc (user_selected_products)
+                $productId = (int)($_POST['product_id'] ?? 0);
+                $affiliateUrl = trim((string)($_POST['affiliate_url'] ?? ''));
+                $pdo = db_pdo();
+                $stmt = $pdo->prepare("SELECT * FROM affiliate_products WHERE id = ? AND site_id = ?");
+                $stmt->execute([$productId, (int)currentSiteId()]);
+                $product = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$product) {
+                    json_response(false, 'Không tìm thấy sản phẩm #' . $productId);
+                }
+                $data = [
+                    'source_product_id' => $product['source_product_id'],
+                    'product_name' => $product['product_name'],
+                    'product_url' => $product['product_url'],
+                    'affiliate_url' => $affiliateUrl,
+                    'source_platform' => $product['source_platform'],
+                    'price' => $product['price'],
+                    'status' => !empty($affiliateUrl) ? 'pending' : 'pending',
+                ];
+                $saved = $userSelectedProductService->upsert($data);
+                json_response(true, 'Đã thêm sản phẩm vào danh sách chọn.');
                 break;
 
             case '/links/generate':
@@ -1059,31 +1084,27 @@ switch ($path) {
 
     case '/products':
         requirePermission('products.view');
-        // Đọc từ bảng affiliate_products (dữ liệu cào từ Tiki/Shopee/etc)
-        $dbProducts = db_pdo()->query(
-            "SELECT * FROM affiliate_products WHERE site_id = " . (int)currentSiteId() . " ORDER BY sold_count DESC, id DESC"
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $perPage = 25;
+        $offset = ($page - 1) * $perPage;
+        $siteId = (int)currentSiteId();
+        $pdo = db_pdo();
+        $total = (int)$pdo->query("SELECT COUNT(*) FROM user_selected_products WHERE site_id = {$siteId}")->fetchColumn();
+        $selectedProducts = $pdo->query(
+            "SELECT * FROM user_selected_products WHERE site_id = {$siteId} ORDER BY id DESC LIMIT {$perPage} OFFSET {$offset}"
         )->fetchAll(PDO::FETCH_ASSOC);
+        $totalPages = max(1, (int)ceil($total / $perPage));
         $productSummary = [
-            'total' => count($dbProducts),
-            'with_link' => count(array_filter($dbProducts, fn($p) => !empty($p['affiliate_url'] ?? ''))),
-            'hot' => count(array_filter($dbProducts, fn($p) => (int)($p['sold_count'] ?? 0) >= 50)),
+            'total' => $total,
+            'with_link' => (int)$pdo->query("SELECT COUNT(*) FROM user_selected_products WHERE site_id = {$siteId} AND affiliate_url != ''")->fetchColumn(),
+            'hot' => (int)$pdo->query("SELECT COUNT(*) FROM user_selected_products WHERE site_id = {$siteId} AND sold_count >= 50")->fetchColumn(),
         ];
         render('products/index', [
             'pageTitle'      => 'Sản phẩm',
             'currentPage'    => 'products',
             'productSummary' => $productSummary,
-            'products'       => $dbProducts,
-        ]);
-        break;
-
-    case '/links':
-        render('links/index', [
-            'pageTitle'   => 'Affiliate Links',
-            'currentPage' => 'links',
-            'linkSummary' => $linkService->summary(),
-            'links'       => $linkService->allLinks(),
-            'products'    => $productSyncService->allProducts(),
-            'automationSettings' => $automationSettings,
+            'products'       => $selectedProducts,
+            'pagination'     => ['page' => $page, 'perPage' => $perPage, 'total' => $total, 'totalPages' => $totalPages],
         ]);
         break;
 

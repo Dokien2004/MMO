@@ -14,7 +14,31 @@ $radarEligible = array_filter($allProducts, static fn(array $p): bool =>
 usort($radarEligible, static fn(array $a, array $b): int => (int)($b['sold_count'] ?? 0) - (int)($a['sold_count'] ?? 0));
 $topRadarEligible = array_slice($radarEligible, 0, 5);
 ?>
-<!doctype html>
+                <style>
+                .select-row-expanded { background: #f0f4ff !important }
+                .select-form-row td { padding: 10px 12px !important; border-bottom: 2px solid var(--accent) }
+                .select-form-row input[type=text] { width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px }
+                .select-form-row .btn { margin-top: 4px }
+                </style>
+                <script>
+                function toggleSelectForm(id) {
+                    var row = document.getElementById('select-form-' + id);
+                    document.querySelectorAll('.select-form-row').forEach(function(r) { r.remove(); });
+                    if (row) { return; }
+                    var tr = document.createElement('tr');
+                    tr.id = 'select-form-' + id;
+                    tr.className = 'select-form-row';
+                    tr.innerHTML = '<td colspan=5>' +
+                        '<form method="POST" action="<?= url('/products/select') ?>" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+                        '<input type="hidden" name="product_id" value="' + id + '">' +
+                        '<input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">' +
+                        '<input type="text" name="affiliate_url" placeholder="Dán link affiliate (shope.ee/... hoặc tiki.co/...)" style="flex:1;min-width:200px">' +
+                        '<button type="submit" class="btn btn-accent btn-sm">Lưu vào My Products</button>' +
+                        '<button type="button" class="btn btn-ghost btn-sm" onclick="toggleSelectForm(' + id + ')">✕</button>' +
+                        '</form></td>';
+                    document.getElementById('product-row-' + id).after(tr);
+                }
+                </script>
 <html lang="vi">
 <head>
     <meta charset="utf-8">
@@ -214,12 +238,12 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
                         <th style="width:70px">Nguồn</th>
                         <th style="width:90px">Giá</th>
                         <th style="width:80px">Đã bán</th>
-                        <th style="width:90px">Trạng thái</th>
+                        <th style="width:90px">Thao tác</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php foreach ($allProducts as $product): ?>
-                    <tr>
+                    <tr id="product-row-<?= (int)$product['id'] ?>">
                         <td>
                             <strong class="item-title" style="font-size:13px"><?= e((string)$product['product_name']) ?></strong>
                             <div class="item-meta sub" style="font-size:11px">#<?= (int)$product['id'] ?></div>
@@ -230,12 +254,31 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
                         <td><span class="badge badge-<?= e((string)$product['source_platform']) ?>" style="font-size:11px"><?= e((string)$product['source_platform']) ?></span></td>
                         <td class="text-sm"><?= (float)($product['price'] ?? 0) > 0 ? number_format((float)$product['price'], 0, ',', '.') . ' ₫' : '—' ?></td>
                         <td><span class="metric-pill <?= (int)($product['sold_count'] ?? 0) >= 1000 ? 'hot' : '' ?>" style="font-size:11px"><?= number_format((int)($product['sold_count'] ?? 0)) ?></span></td>
-                        <td><?= status_badge((string)$product['status']) ?></td>
+                        <td>
+                            <button type="button" class="btn btn-ghost btn-sm" onclick="toggleSelectForm(<?= (int)$product['id'] ?>)" style="font-size:11px;padding:4px 8px">+ Chọn</button>
+                        </td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>
             </table>
         </div>
+        <?php if (($pagination['totalPages'] ?? 1) > 1): ?>
+        <div class="pagination-wrap" style="display:flex;justify-content:center;gap:6px;margin-top:16px;flex-wrap:wrap">
+            <?php if ($pagination['page'] > 1): ?>
+                <a class="btn btn-ghost btn-sm" href="<?= url('/products?page=' . ($pagination['page'] - 1)) ?>">← Trang trước</a>
+            <?php endif; ?>
+            <?php for ($p = max(1, $pagination['page'] - 2); $p <= min($pagination['totalPages'], $pagination['page'] + 2); $p++): ?>
+                <?php if ($p == $pagination['page']): ?>
+                    <span class="btn btn-accent btn-sm"><?= $p ?></span>
+                <?php else: ?>
+                    <a class="btn btn-ghost btn-sm" href="<?= url('/products?page=' . $p) ?>"><?= $p ?></a>
+                <?php endif; ?>
+            <?php endfor; ?>
+            <?php if ($pagination['page'] < $pagination['totalPages']): ?>
+                <a class="btn btn-ghost btn-sm" href="<?= url('/products?page=' . ($pagination['page'] + 1)) ?>">Trang sau →</a>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
     <?php endif; ?>
 </div>
 
