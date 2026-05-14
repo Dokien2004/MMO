@@ -198,14 +198,6 @@ $statusLabels = [
             </div>
             <div class="grid-3" style="margin-bottom:12px;">
                 <div class="form-group">
-                    <label class="form-label">Giá (₫)</label>
-                    <input class="form-control" name="price" type="number" min="0" step="1000" placeholder="99000">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Hoa hồng (%)</label>
-                    <input class="form-control" name="commission_rate" type="number" min="0" max="100" step="0.5" placeholder="5">
-                </div>
-                <div class="form-group">
                     <label class="form-label">Nguồn</label>
                     <select class="form-control" name="source_platform">
                         <option value="shopee">Shopee</option>
@@ -247,14 +239,6 @@ $statusLabels = [
                 <input class="form-control" name="product_url" id="edit_product_url">
             </div>
             <div class="grid-3" style="margin-bottom:12px;">
-                <div class="form-group">
-                    <label class="form-label">Giá (₫)</label>
-                    <input class="form-control" name="price" id="edit_price" type="number" min="0" step="1000">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Hoa hồng (%)</label>
-                    <input class="form-control" name="commission_rate" id="edit_commission_rate" type="number" min="0" max="100" step="0.5">
-                </div>
                 <div class="form-group">
                     <label class="form-label">Trạng thái</label>
                     <select class="form-control" name="status" id="edit_status">
@@ -309,8 +293,6 @@ function openEditModal(id) {
             document.getElementById('edit_product_name').value = p.product_name || '';
             document.getElementById('edit_product_url').value = p.product_url || '';
             document.getElementById('edit_affiliate_url').value = p.affiliate_url || '';
-            document.getElementById('edit_price').value = p.price || '';
-            document.getElementById('edit_commission_rate').value = p.commission_rate || '';
             document.getElementById('edit_status').value = p.status || 'pending';
             document.getElementById('edit_notes').value = p.notes || '';
             document.getElementById('editModal').style.display = 'flex';

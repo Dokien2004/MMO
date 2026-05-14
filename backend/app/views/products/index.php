@@ -17,27 +17,21 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
                 <style>
                 .select-row-expanded { background: #f0f4ff !important }
                 .select-form-row td { padding: 10px 12px !important; border-bottom: 2px solid var(--accent) }
-                .select-form-row input[type=text] { width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px }
-                .select-form-row .btn { margin-top: 4px }
                 </style>
                 <script>
-                function toggleSelectForm(id) {
-                    var row = document.getElementById('select-form-' + id);
-                    document.querySelectorAll('.select-form-row').forEach(function(r) { r.remove(); });
-                    if (row) { return; }
-                    var tr = document.createElement('tr');
-                    tr.id = 'select-form-' + id;
-                    tr.className = 'select-form-row';
-                    tr.innerHTML = '<td colspan=5>' +
-                        '<form method="POST" action="<?= url('/products/select') ?>" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
-                        '<input type="hidden" name="product_id" value="' + id + '">' +
-                        '<input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">' +
-                        '<input type="text" name="affiliate_url" placeholder="Dán link affiliate (shope.ee/... hoặc tiki.co/...)" style="flex:1;min-width:200px">' +
-                        '<button type="submit" class="btn btn-accent btn-sm">Lưu vào My Products</button>' +
-                        '<button type="button" class="btn btn-ghost btn-sm" onclick="toggleSelectForm(' + id + ')">✕</button>' +
-                        '</form></td>';
-                    document.getElementById('product-row-' + id).after(tr);
+                function openSelectModal(id, name) {
+                    document.getElementById('select_product_id').value = id;
+                    document.getElementById('selectProductName').textContent = name;
+                    document.getElementById('selectModal').style.display = 'flex';
                 }
+                function closeSelectModal() {
+                    document.getElementById('selectModal').style.display = 'none';
+                }
+                document.addEventListener('DOMContentLoaded', () => {
+                    document.getElementById('selectModal').addEventListener('click', function(e) {
+                        if (e.target === this) this.style.display = 'none';
+                    });
+                });
                 </script>
 <html lang="vi">
 <head>
@@ -255,7 +249,7 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
                         <td class="text-sm"><?= (float)($product['price'] ?? 0) > 0 ? number_format((float)$product['price'], 0, ',', '.') . ' ₫' : '—' ?></td>
                         <td><span class="metric-pill <?= (int)($product['sold_count'] ?? 0) >= 1000 ? 'hot' : '' ?>" style="font-size:11px"><?= number_format((int)($product['sold_count'] ?? 0)) ?></span></td>
                         <td>
-                            <button type="button" class="btn btn-ghost btn-sm" onclick="toggleSelectForm(<?= (int)$product['id'] ?>)" style="font-size:11px;padding:4px 8px">+ Chọn</button>
+                            <button type="button" class="btn btn-ghost btn-sm" onclick="openSelectModal(<?= (int)$product['id'] ?>, '<?= e(addslashes((string)$product['product_name'])) ?>')" style="font-size:11px;padding:4px 8px">+ Chọn</button>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -280,6 +274,26 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
         </div>
         <?php endif; ?>
     <?php endif; ?>
+</div>
+
+<!-- Select Product Modal -->
+<div class="modal-overlay" id="selectModal" style="display:none;">
+    <div class="modal-box" style="max-width:480px;">
+        <h3>Chọn Sản Phẩm</h3>
+        <p class="sub" style="margin-bottom:16px;">Sản phẩm: <strong id="selectProductName"></strong></p>
+        <form method="POST" action="<?= url('/products/select') ?>">
+            <input type="hidden" name="product_id" id="select_product_id">
+            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+            <div class="form-group" style="margin-bottom:16px;">
+                <label class="form-label">Link Affiliate</label>
+                <input class="form-control" name="affiliate_url" placeholder="Dán link affiliate (shope.ee/... hoặc tiki.co/...)">
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-accent" style="flex:1;">Lưu vào My Products</button>
+                <button type="button" class="btn btn-cancel" onclick="closeSelectModal()">Hủy</button>
+            </div>
+        </form>
+    </div>
 </div>
 
 </body>

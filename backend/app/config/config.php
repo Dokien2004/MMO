@@ -146,7 +146,7 @@ if (!defined('TELEGRAM_CHAT_ID')) {
 }
 
 if (!defined('DB_HOST')) {
-    define('DB_HOST', '127.0.0.1');
+    define('DB_HOST', '100.84.215.4');
 }
 if (!defined('DB_PORT')) {
     define('DB_PORT', 3306);
@@ -158,7 +158,7 @@ if (!defined('DB_USERNAME')) {
     define('DB_USERNAME', 'mmo_app');
 }
 if (!defined('DB_PASSWORD')) {
-    define('DB_PASSWORD', '');
+    define('DB_PASSWORD', 'CQjKqOsclR8znHRSfs2iHrUzOqWkgxex');
 }
 if (!defined('PRODUCT_IMPORT_TOKEN')) {
     define('PRODUCT_IMPORT_TOKEN', '');

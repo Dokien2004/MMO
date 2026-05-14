@@ -1089,21 +1089,21 @@ switch ($path) {
         $offset = ($page - 1) * $perPage;
         $siteId = (int)currentSiteId();
         $pdo = db_pdo();
-        $total = (int)$pdo->query("SELECT COUNT(*) FROM user_selected_products WHERE site_id = {$siteId}")->fetchColumn();
-        $selectedProducts = $pdo->query(
-            "SELECT * FROM user_selected_products WHERE site_id = {$siteId} ORDER BY id DESC LIMIT {$perPage} OFFSET {$offset}"
+        $total = (int)$pdo->query("SELECT COUNT(*) FROM affiliate_products WHERE site_id = {$siteId}")->fetchColumn();
+        $dbProducts = $pdo->query(
+            "SELECT * FROM affiliate_products WHERE site_id = {$siteId} ORDER BY sold_count DESC, id DESC LIMIT {$perPage} OFFSET {$offset}"
         )->fetchAll(PDO::FETCH_ASSOC);
         $totalPages = max(1, (int)ceil($total / $perPage));
         $productSummary = [
             'total' => $total,
-            'with_link' => (int)$pdo->query("SELECT COUNT(*) FROM user_selected_products WHERE site_id = {$siteId} AND affiliate_url != ''")->fetchColumn(),
-            'hot' => (int)$pdo->query("SELECT COUNT(*) FROM user_selected_products WHERE site_id = {$siteId} AND sold_count >= 50")->fetchColumn(),
+            'with_link' => (int)$pdo->query("SELECT COUNT(*) FROM affiliate_products WHERE site_id = {$siteId} AND affiliate_url != ''")->fetchColumn(),
+            'hot' => (int)$pdo->query("SELECT COUNT(*) FROM affiliate_products WHERE site_id = {$siteId} AND sold_count >= 50")->fetchColumn(),
         ];
         render('products/index', [
             'pageTitle'      => 'Sản phẩm',
             'currentPage'    => 'products',
             'productSummary' => $productSummary,
-            'products'       => $selectedProducts,
+            'products'       => $dbProducts,
             'pagination'     => ['page' => $page, 'perPage' => $perPage, 'total' => $total, 'totalPages' => $totalPages],
         ]);
         break;
