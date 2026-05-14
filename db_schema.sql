@@ -315,3 +315,29 @@ CREATE TABLE `users` (
   CONSTRAINT `fk_user_role` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ══════════════════════════════════════════
+-- AI Product Scoring (Phase 1)
+-- ══════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS `product_scores` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `site_id` int(11) NOT NULL DEFAULT 1,
+  `product_id` bigint(20) unsigned NOT NULL,
+  `overall_score` decimal(5,2) NOT NULL DEFAULT 0.00 COMMENT '0-100 overall score',
+  `sales_velocity` decimal(10,2) DEFAULT 0.00 COMMENT 'Units sold per day',
+  `price_stability` decimal(5,2) DEFAULT 0.00 COMMENT 'Price stability 0-100',
+  `review_sentiment` decimal(5,2) DEFAULT 0.00 COMMENT 'Review sentiment 0-100',
+  `competition_level` decimal(5,2) DEFAULT 0.00 COMMENT 'Competition level 0-100',
+  `trend_direction` enum('rising','stable','declining') DEFAULT 'stable',
+  `ai_analysis` text DEFAULT NULL COMMENT 'AI reasoning JSON',
+  `recommendation` enum('strong_buy','buy','hold','avoid') DEFAULT 'hold',
+  `scored_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_scores_site_product` (`site_id`,`product_id`),
+  KEY `idx_scores_overall` (`site_id`,`overall_score` DESC),
+  KEY `idx_scores_recommendation` (`site_id`,`recommendation`),
+  KEY `idx_scores_trend` (`site_id`,`trend_direction`),
+  KEY `idx_scores_scored_at` (`scored_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

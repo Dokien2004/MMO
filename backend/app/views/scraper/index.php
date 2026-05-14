@@ -66,10 +66,9 @@ for ($i = 0; $i < count($priceDataK); $i++) { $scatterData[] = ['x' => $priceDat
 
 <!-- Quick links -->
 <div class="quick-links">
-    <a class="btn btn-primary" href="#charts">Charts</a>
-    <a class="btn" href="#hot-cats">Hot Categories</a>
-    <a class="btn btn-accent" href="#tools">Cong cu</a>
-    <a class="btn btn-success" href="<?= url('/scraper/radar') ?>">Phân tích</a>
+    <a class="btn btn-primary" href="#charts">Biểu đồ</a>
+    <a class="btn" href="#hot-cats">Danh mục Hot</a>
+    <a class="btn btn-success" href="#radar-analysis">Phân tích</a>
 </div>
 
 <!-- KPI -->
@@ -119,7 +118,7 @@ for ($i = 0; $i < count($priceDataK); $i++) { $scatterData[] = ['x' => $priceDat
 <!-- Hot categories -->
 <div class="card" id="hot-cats" style="margin-bottom:20px">
     <div class="card-title" style="font-size:15px">Hot Categories - Top bán theo ngành</div>
-    <p class="text-muted text-sm" style="margin-bottom:12px">Sản phẩm xếp theo tong lượt bán. Nhung ngành co ban nhieu nhat.</p>
+    <p class="text-muted text-sm" style="margin-bottom:12px">Sản phẩm xếp theo tổng lượt bán. Những ngành có bán nhiều nhất.</p>
     <?php
     // Simple category grouping by name keywords
     $catGroups = ['Thoi trang' => 0, 'Dien tu' => 0, 'Am thanh' => 0, 'Suc khoe' => 0, 'Me & Be' => 0, 'Khac' => 0];
@@ -145,7 +144,7 @@ for ($i = 0; $i < count($priceDataK); $i++) { $scatterData[] = ['x' => $priceDat
     </div>
     <div class="table-wrap">
         <table class="table-main table-compact">
-            <thead><tr><th>Nghe</th><th>Tổng lượt bán</th><th>Số SP</th><th>Trạng thái</th></tr></thead>
+            <thead><tr><th>Ngành</th><th>Tổng lượt bán</th><th>Số SP</th><th>Trạng thái</th></tr></thead>
             <tbody>
             <?php $r=1; foreach ($catGroups as $cat => $sold): if($sold==0) continue; ?>
                 <tr>
@@ -161,6 +160,24 @@ for ($i = 0; $i < count($priceDataK); $i++) { $scatterData[] = ['x' => $priceDat
 </div>
 
 <!-- Radar search -->
+<div class="card" id="radar-analysis" style="margin-bottom:20px;border-left:4px solid #3b82f6">
+    <div class="card-title" style="font-size:15px">Phân tích AI Radar</div>
+    <p class="text-muted text-sm" style="margin-bottom:14px">Sử dụng AI để tìm kiếm và phân tích cơ hội từ các sản phẩm liên quan.</p>
+    <form data-ajax method="POST" action="<?= url('/scraper/radar') ?>" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
+            <label class="form-label">Ngành / Từ khóa</label>
+            <input class="form-control" name="keyword" placeholder="VD: do hoc tap, setup ban hoc...">
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:6px;color:var(--text-sec);font-size:13px;cursor:pointer">
+                <input type="checkbox" name="fresh_crawl" value="1" style="accent-color:var(--accent)">
+                Crawl mẫu từ Shopee
+            </label>
+            <button type="submit" class="btn btn-primary">Phân tích</button>
+        </div>
+    </form>
+</div>
+
 <div class="card" style="margin-bottom:20px;border-left:4px solid #22c55e">
     <div class="card-title" style="font-size:15px">Thu thập từ URL bất kỳ</div>
     <p class="text-muted text-sm" style="margin-bottom:14px">Dán URL từ bất kỳ nguồn nào — AI tự nhận diện và trích xuất sản phẩm.</p>
@@ -193,20 +210,6 @@ for ($i = 0; $i < count($priceDataK); $i++) { $scatterData[] = ['x' => $priceDat
         </div>
         <div style="flex:0;margin-top:24px">
             <button type="submit" class="btn btn-primary">Trích xuất</button>
-        </div>
-    </form>
-</div>
-    <form data-ajax method="POST" action="<?= url('/scraper/radar') ?>" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-        <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
-            <label class="form-label">Ngành / Từ khóa</label>
-            <input class="form-control" name="keyword" placeholder="VD: do hoc tap, setup ban hoc...">
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <label style="display:flex;align-items:center;gap:6px;color:var(--text-sec);font-size:13px;cursor:pointer">
-                <input type="checkbox" name="fresh_crawl" value="1" style="accent-color:var(--accent)">
-                Crawl mẫu từ Shopee
-            </label>
-            <button type="submit" class="btn btn-primary">Phân tích</button>
         </div>
     </form>
 </div>

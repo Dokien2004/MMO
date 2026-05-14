@@ -31,3 +31,8 @@ require_once __DIR__ . '/services/PendingScrapeJobService.php';
 require_once __DIR__ . '/services/ScraperService.php';
 require_once __DIR__ . '/services/AIKeywordService.php';
 require_once __DIR__ . '/services/AutoCrawlService.php';
+require_once __DIR__ . '/services/ProductScoringService.php';
+require_once __DIR__ . '/services/UserProductService.php';
+require_once __DIR__ . '/services/SocialChannelService.php';
+require_once __DIR__ . '/services/FacebookGroupPublisher.php';
+require_once __DIR__ . '/services/TikTokPublisher.php';

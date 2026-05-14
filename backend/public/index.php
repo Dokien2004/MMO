@@ -128,6 +128,9 @@ $automationSettingsService = new AutomationSettingsService();
 $integrationConfigService = new IntegrationConfigService();
 $scraperService = new ScraperService();
 $pendingScrapeJobService = new PendingScrapeJobService();
+$scoringService = new ProductScoringService();
+$userProductService = new UserProductService();
+$channelService = new SocialChannelService();
 
 function queueScrapeIntervention(
     PendingScrapeJobService $pendingScrapeJobService,
@@ -333,6 +336,151 @@ if ($path === '/api/posts') {
     exit;
 }
 
+// ── API: Product Scores ──
+if ($path === '/api/product-scores') {
+    requirePermission('products.view');
+    header('Content-Type: application/json');
+    echo json_encode(['success' => true, 'data' => $scoringService->getTopRecommendations(30)], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+if ($path === '/api/score-distribution') {
+    requirePermission('products.view');
+    header('Content-Type: application/json');
+    echo json_encode(['success' => true, 'data' => $scoringService->getScoreDistribution()], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+if (preg_match('#^/api/product-trend/(\d+)$#', $path, $m)) {
+    requirePermission('products.view');
+    header('Content-Type: application/json');
+    $days = max(7, min(90, (int)($_GET['days'] ?? 30)));
+    echo json_encode(['success' => true, 'data' => $scoringService->getTrendData((int)$m[1], $days)], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ── My Products API (single product fetch) ──
+if (preg_match('#^/api/my-products/(\d+)$#', $path, $m)) {
+    requirePermission('products.view');
+    header('Content-Type: application/json');
+    $item = $userProductService->findById((int)$m[1]);
+    if (!$item) {
+        echo json_encode(['success' => false, 'message' => 'Không tìm thấy sản phẩm.'], JSON_UNESCAPED_UNICODE);
+    } else {
+        echo json_encode(['success' => true, 'data' => $item], JSON_UNESCAPED_UNICODE);
+    }
+    exit;
+}
+
+// ── My Products dynamic POST routes (update/archive with ID param) ──
+if ($method === 'POST' && preg_match('#^/my-products/update/(\d+)$#', $path, $m)) {
+    verify_csrf();
+    requirePermission('products.view');
+    try {
+        $updated = $userProductService->update((int)$m[1], $_POST);
+        json_response(true, $updated ? 'Đã cập nhật sản phẩm.' : 'Không có thay đổi.');
+    } catch (Throwable $e) {
+        json_response(false, $e->getMessage());
+    }
+    exit;
+}
+
+if ($method === 'POST' && preg_match('#^/my-products/archive/(\d+)$#', $path, $m)) {
+    verify_csrf();
+    requirePermission('products.view');
+    try {
+        $userProductService->archive((int)$m[1]);
+        json_response(true, 'Đã lưu trữ sản phẩm.');
+    } catch (Throwable $e) {
+        json_response(false, $e->getMessage());
+    }
+    exit;
+}
+
+// ── Channel API (single channel fetch) ──
+if (preg_match('#^/api/channels/(\d+)$#', $path, $m)) {
+    requirePermission('settings.view');
+    header('Content-Type: application/json');
+    $item = $channelService->findById((int)$m[1]);
+    if (!$item) {
+        echo json_encode(['success' => false, 'message' => 'Không tìm thấy kênh.'], JSON_UNESCAPED_UNICODE);
+    } else {
+        echo json_encode(['success' => true, 'data' => $item], JSON_UNESCAPED_UNICODE);
+    }
+    exit;
+}
+
+// ── Channel dynamic POST routes (update/delete with ID param) ──
+if ($method === 'POST' && preg_match('#^/channels/update/(\d+)$#', $path, $m)) {
+    verify_csrf();
+    requirePermission('settings.edit');
+    try {
+        $channelService->update((int)$m[1], $_POST);
+        json_response(true, 'Đã cập nhật kênh.');
+    } catch (Throwable $e) {
+        json_response(false, $e->getMessage());
+    }
+    exit;
+}
+
+if ($method === 'POST' && preg_match('#^/channels/delete/(\d+)$#', $path, $m)) {
+    verify_csrf();
+    requirePermission('settings.edit');
+    try {
+        $channelService->delete((int)$m[1]);
+        json_response(true, 'Đã xóa kênh.');
+    } catch (Throwable $e) {
+        json_response(false, $e->getMessage());
+    }
+    exit;
+}
+
+// ── Publish to channel (multi-channel) ──
+if ($method === 'POST' && preg_match('#^/channels/publish/(\d+)$#', $path, $m)) {
+    verify_csrf();
+    requirePermission('posts.manage');
+    try {
+        $channelId = (int)$m[1];
+        $contentId = (int)($_POST['content_id'] ?? 0);
+        $channel = $channelService->findById($channelId);
+        if (!$channel) throw new InvalidArgumentException('Không tìm thấy kênh #' . $channelId);
+        if (!$channelService->canPostToday($channelId)) throw new RuntimeException('Kênh đã đạt giới hạn bài/ngày.');
+        
+        $content = $contentService->findById($contentId);
+        if (!$content) throw new InvalidArgumentException('Không tìm thấy content #' . $contentId);
+        
+        $result = [];
+        switch ($channel['channel_type']) {
+            case 'facebook_page':
+                $fbPublisher = new FacebookPagePublisher();
+                $result = $fbPublisher->publish($content, []);
+                break;
+            case 'facebook_group':
+                $fbGroupPublisher = new FacebookGroupPublisher();
+                $result = $fbGroupPublisher->publish($content, $channel);
+                break;
+            case 'tiktok':
+                $tiktokPublisher = new TikTokPublisher();
+                $result = $tiktokPublisher->publish($content, $channel);
+                break;
+            default:
+                throw new InvalidArgumentException('Loại kênh không được hỗ trợ: ' . $channel['channel_type']);
+        }
+        
+        $channelService->incrementPostCount($channelId);
+        $taskLogService->create('channel_publish', 'success', [
+            'channel_id' => $channelId,
+            'content_id' => $contentId,
+            'channel_type' => $channel['channel_type'],
+        ], $result);
+        
+        json_response(true, $result['message'] ?? 'Đã đăng bài thành công.', $result);
+    } catch (Throwable $e) {
+        json_response(false, $e->getMessage());
+    }
+    exit;
+}
+
 // ══════════════════════════════════════════
 //  POST ACTION HANDLERS
 //  CSRF validated + permission checked
@@ -380,6 +528,10 @@ $postPermissionMap = [
     '/admin/sites/update'    => 'admin.sites',
     '/admin/sites/toggle'    => 'admin.sites',
     '/admin/sites/change-current' => 'admin.sites',
+    '/my-products/add'            => 'products.view',
+    '/my-products/pick'           => 'products.view',
+    '/my-products/generate-content' => 'products.view',
+    '/channels/create'             => 'settings.edit',
 ];
 
 if ($method === 'POST') {
@@ -685,6 +837,22 @@ if ($method === 'POST') {
                 json_response(true, 'Đã phân tích ' . (int)$radar['count'] . ' cơ hội sản phẩm tiềm năng.', ['data' => $radar]);
                 break;
 
+            // ── AI Product Scoring ──
+            case '/scores/run':
+                requirePermission('products.view');
+                $limit = max(5, min(100, (int)($_POST['limit'] ?? 30)));
+                $result = $scoringService->scoreAllProducts($limit);
+                $taskLogService->create('score_products_manual', empty($result['errors']) ? 'success' : 'failed', ['limit' => $limit], $result);
+                json_response(true, 'Đã chấm điểm ' . $result['scored'] . ' sản phẩm.', ['data' => $result]);
+                break;
+
+            case '/scores/score-one':
+                requirePermission('products.view');
+                $productId = (int)($_POST['product_id'] ?? 0);
+                $scoreData = $scoringService->scoreProduct($productId);
+                json_response(true, 'Đã chấm điểm sản phẩm #' . $productId . '.', ['data' => $scoreData]);
+                break;
+
             // ── Scrape any URL (AI extracts products from any source) ──
             case '/scraper/scrape-url':
                 requirePermission('scraper.view');
@@ -816,6 +984,45 @@ if ($method === 'POST') {
                 json_response(true, 'Đã chuyển sang site ' . $site['code'] . '.');
                 break;
 
+            // ── My Products: manual add ──
+            case '/my-products/add':
+                $result = $userProductService->addManual($_POST);
+                json_response(true, 'Đã thêm sản phẩm "' . ($result['product_name'] ?? '') . '".', $result);
+                break;
+
+            // ── My Products: pick from AI Radar ──
+            case '/my-products/pick':
+                $sourceId = (int)($_POST['source_product_id'] ?? 0);
+                if ($sourceId <= 0) throw new InvalidArgumentException('Thiếu ID sản phẩm nguồn.');
+                $result = $userProductService->pickFromRadar($sourceId);
+                json_response(true, 'Đã chọn sản phẩm "' . ($result['product_name'] ?? '') . '".', $result);
+                break;
+
+            // ── My Products: trigger content generation ──
+            case '/my-products/generate-content':
+                $productId = (int)($_POST['product_id'] ?? 0);
+                $item = $userProductService->findById($productId);
+                if (!$item) throw new InvalidArgumentException('Không tìm thấy sản phẩm #' . $productId);
+                if (empty($item['affiliate_url'])) throw new RuntimeException('Sản phẩm chưa có link affiliate.');
+                // Generate content via ContentService
+                $contentResult = $contentService->generateForProduct([
+                    'id' => $item['id'],
+                    'product_name' => $item['product_name'],
+                    'product_url' => $item['product_url'],
+                    'affiliate_url' => $item['affiliate_url'],
+                    'price' => $item['price'],
+                    'source_platform' => $item['source_platform'],
+                ]);
+                $userProductService->update($productId, ['status' => 'content_generated', 'content_status' => 'generated']);
+                json_response(true, 'Đã sinh nội dung cho sản phẩm.', $contentResult);
+                break;
+
+            // ── Channels: Create ──
+            case '/channels/create':
+                $channelId = $channelService->create($_POST);
+                json_response(true, 'Đã thêm kênh mới thành công.', ['id' => $channelId]);
+                break;
+
             default:
                 $handled = false;
                 break;
@@ -853,7 +1060,7 @@ switch ($path) {
     case '/products':
         requirePermission('products.view');
         // Đọc từ bảng affiliate_products (dữ liệu cào từ Tiki/Shopee/etc)
-        $dbProducts = $pdo->query(
+        $dbProducts = db_pdo()->query(
             "SELECT * FROM affiliate_products WHERE site_id = " . (int)currentSiteId() . " ORDER BY sold_count DESC, id DESC"
         )->fetchAll(PDO::FETCH_ASSOC);
         $productSummary = [
@@ -933,6 +1140,46 @@ switch ($path) {
             'topProducts'     => $productSyncService->topSellingProducts(10, 50),
             'productRadar'    => $scraperService->buildProductRadar(12),
             'serverInfo'      => $serverInfoSvc->get(),
+        ]);
+        break;
+
+    case '/analytics':
+        requirePermission('products.view');
+        render('analytics/index', [
+            'pageTitle'          => 'Phân tích & AI Radar',
+            'currentPage'        => 'analytics',
+            'scoreSummary'       => $scoringService->summary(),
+            'scoreDistribution'  => $scoringService->getScoreDistribution(),
+            'topRecommendations' => $scoringService->getTopRecommendations(20),
+            'productSummary'     => $productSyncService->dashboardSummary(),
+        ]);
+        break;
+
+    case '/channels':
+        requirePermission('settings.view');
+        render('channels/index', [
+            'currentPage' => 'channels',
+            'channels' => $channelService->list(),
+            'summary' => $channelService->summary(),
+        ]);
+        break;
+
+    case '/my-products':
+        requirePermission('products.view');
+        $filters = [
+            'search'   => trim((string)($_GET['search'] ?? '')),
+            'status'   => trim((string)($_GET['status'] ?? '')),
+            'platform' => trim((string)($_GET['platform'] ?? '')),
+        ];
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $perPage = 20;
+        $products = $userProductService->list($filters, $perPage, ($page - 1) * $perPage);
+        render('my-products/index', [
+            'pageTitle'   => 'SP Đã Chọn — My Products',
+            'currentPage' => 'my_products',
+            'products'    => $products,
+            'summary'     => $userProductService->summary(),
+            'filters'     => $filters,
         ]);
         break;
 
