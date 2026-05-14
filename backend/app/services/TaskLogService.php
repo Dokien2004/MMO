@@ -18,8 +18,8 @@ final class TaskLogService
     {
         $logs = $this->storage->read($this->fileName);
         $entry = [
-            'id' => count($logs) + 1,
-            'site_id' => APP_SITE_ID,
+            'id' => $this->storage->nextId($this->fileName),
+            'site_id' => currentSiteId(),
             'task_name' => $taskName,
             'status' => $status,
             'payload' => $payload,
@@ -39,7 +39,7 @@ final class TaskLogService
         $logs = $this->storage->read($this->fileName);
         foreach ($logs as &$log) {
             if (!isset($log['site_id'])) {
-                $log['site_id'] = APP_SITE_ID;
+                $log['site_id'] = currentSiteId();
             }
         }
         unset($log);

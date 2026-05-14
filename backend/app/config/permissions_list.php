@@ -31,6 +31,9 @@ return [
     'settings.view' => 'Xem cấu hình hệ thống',
     'settings.edit' => 'Sửa cấu hình hệ thống',
 
+    // SERVER INFO
+    'server-info.view' => 'Xem thông tin server',
+
     // LOGS
     'logs.view' => 'Xem nhật ký hoạt động',
 

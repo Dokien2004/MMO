@@ -42,7 +42,7 @@ final class PostingService
         $scheduledTime = $this->normalizeScheduledAt($scheduledAt);
         $record = [
             'id' => $existing['id'] ?? $this->nextId($posts),
-            'site_id' => (int)($content['site_id'] ?? APP_SITE_ID),
+            'site_id' => (int)($content['site_id'] ?? currentSiteId()),
             'content_id' => $contentId,
             'product_id' => (int)$content['product_id'],
             'channel' => $channel,
@@ -94,10 +94,49 @@ final class PostingService
 
         if (($post['channel'] ?? '') === 'fanpage_api') {
             $result = $this->facebookPagePublisher->publish($content, $post);
-            return $this->changePostStatus($postId, 'success', $result['message'], $result['facebook_post_id'] ?? '');
+            $remotePostId = (string)($result['facebook_post_id'] ?? '');
+            $note = (string)$result['message'];
+
+            $affiliateComment = $this->buildAffiliateComment($content);
+            if ($remotePostId !== '' && $affiliateComment !== '') {
+                try {
+                    $commentResult = $this->facebookPagePublisher->commentOnPost($remotePostId, $affiliateComment);
+                    $note .= ' ' . $commentResult['message'];
+                    if (!empty($commentResult['comment_id'])) {
+                        $note .= ' Comment ID: ' . $commentResult['comment_id'];
+                    }
+                    $this->taskLogService->create('facebook_affiliate_comment', 'success', [
+                        'post_id' => $postId,
+                        'content_id' => (int)$content['id'],
+                        'remote_post_id' => $remotePostId,
+                    ], [
+                        'comment_id' => $commentResult['comment_id'] ?? '',
+                    ]);
+                } catch (Throwable $throwable) {
+                    $note .= ' Tuy nhiên comment link affiliate lỗi: ' . $throwable->getMessage();
+                    $this->taskLogService->create('facebook_affiliate_comment', 'failed', [
+                        'post_id' => $postId,
+                        'content_id' => (int)$content['id'],
+                        'remote_post_id' => $remotePostId,
+                    ], [], $throwable->getMessage());
+                }
+            }
+
+            return $this->changePostStatus($postId, 'success', $note, $remotePostId);
         }
 
         throw new InvalidArgumentException('Channel nay khong ho tro publish tu dong. Dung mark posted cho che do manual.');
+    }
+
+    private function buildAffiliateComment(array $content): string
+    {
+        $product = $this->productSyncService->findProductById((int)($content['product_id'] ?? 0));
+        $affiliateUrl = trim((string)($product['affiliate_url'] ?? ''));
+        if ($affiliateUrl === '') {
+            return '';
+        }
+
+        return "Link mua / săn deal: " . $affiliateUrl;
     }
 
     public function publishDueScheduledPosts(int $limit = 10): array
@@ -130,10 +169,10 @@ final class PostingService
         ];
     }
 
-    public function scheduleForApprovedContents(int $limit = 10, string $channel = 'fanpage_manual'): array
+    public function scheduleForApprovedContents(int $limit = 10, string $channel = 'fanpage_manual', ?string $startAt = null, int $intervalMinutes = 15): array
     {
         $contents = $this->contentService->allContents();
-        $scheduled = [];
+        $ids = [];
 
         foreach ($contents as $content) {
             if (($content['status'] ?? '') !== 'approved') {
@@ -144,15 +183,43 @@ final class PostingService
                 continue;
             }
 
-            $scheduled[] = $this->schedulePost((int)$content['id'], $channel);
-            if (count($scheduled) >= $limit) {
+            $ids[] = (int)$content['id'];
+            if (count($ids) >= $limit) {
                 break;
+            }
+        }
+
+        return $this->scheduleSelectedContents($ids, $channel, $startAt, $intervalMinutes);
+    }
+
+    public function scheduleSelectedContents(array $contentIds, string $channel = 'fanpage_manual', ?string $startAt = null, int $intervalMinutes = 15): array
+    {
+        $contentIds = array_values(array_unique(array_filter(array_map('intval', $contentIds), static fn(int $id): bool => $id > 0)));
+        if (empty($contentIds)) {
+            throw new InvalidArgumentException('Chua chon content/san pham nao de len lich.');
+        }
+
+        $intervalMinutes = max(1, min(1440, $intervalMinutes));
+        $startTimestamp = $this->scheduledTimestamp($startAt);
+        $scheduled = [];
+        $errors = [];
+
+        foreach ($contentIds as $index => $contentId) {
+            $scheduledAt = date('c', $startTimestamp + ($index * $intervalMinutes * 60));
+            try {
+                $scheduled[] = $this->schedulePost($contentId, $channel, $scheduledAt);
+            } catch (Throwable $throwable) {
+                $errors[] = [
+                    'content_id' => $contentId,
+                    'error' => $throwable->getMessage(),
+                ];
             }
         }
 
         return [
             'count' => count($scheduled),
             'posts' => $scheduled,
+            'errors' => $errors,
         ];
     }
 
@@ -161,7 +228,7 @@ final class PostingService
         $posts = $this->storage->read($this->fileName);
         foreach ($posts as &$post) {
             if (!isset($post['site_id'])) {
-                $post['site_id'] = APP_SITE_ID;
+                $post['site_id'] = currentSiteId();
             }
             if (!isset($post['remote_post_id'])) {
                 $post['remote_post_id'] = '';
@@ -270,20 +337,22 @@ final class PostingService
 
     private function nextId(array $posts): int
     {
-        $ids = array_map(static function (array $post): int {
-            return (int)($post['id'] ?? 0);
-        }, $posts);
-        return empty($ids) ? 1 : (max($ids) + 1);
+        return $this->storage->nextId($this->fileName);
     }
 
     private function normalizeScheduledAt(?string $scheduledAt): string
     {
+        return date('c', $this->scheduledTimestamp($scheduledAt));
+    }
+
+    private function scheduledTimestamp(?string $scheduledAt): int
+    {
         $candidate = trim((string)$scheduledAt);
         if ($candidate === '') {
-            return date('c', time() + 3600);
+            return time() + 3600;
         }
 
         $timestamp = strtotime($candidate);
-        return $timestamp === false ? date('c', time() + 3600) : date('c', $timestamp);
+        return $timestamp === false ? time() + 3600 : $timestamp;
     }
 }

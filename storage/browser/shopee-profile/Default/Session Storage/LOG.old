@@ -1,2 +1,3 @@
-2026/05/01-17:46:46.849 14e0 Creating DB C:\xampp\htdocs\MMO\storage\browser\shopee-profile\Default\Session Storage since it was missing.
-2026/05/01-17:46:46.863 14e0 Reusing MANIFEST C:\xampp\htdocs\MMO\storage\browser\shopee-profile\Default\Session Storage/MANIFEST-000001
+2026/05/04-13:39:18.417 1c384f Reusing MANIFEST /home/dokien/.openclaw/workspace/MMO/storage/browser/shopee-profile/Default/Session Storage/MANIFEST-000001
+2026/05/04-13:39:18.418 1c384f Recovering log #3
+2026/05/04-13:39:18.419 1c384f Reusing old log /home/dokien/.openclaw/workspace/MMO/storage/browser/shopee-profile/Default/Session Storage/000003.log 

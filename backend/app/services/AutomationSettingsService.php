@@ -15,7 +15,7 @@ final class AutomationSettingsService
     public function get(): array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM automation_settings WHERE site_id = :site_id LIMIT 1');
-        $stmt->execute([':site_id' => APP_SITE_ID]);
+        $stmt->execute([':site_id' => currentSiteId()]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!is_array($row)) {
@@ -101,6 +101,9 @@ SQL;
         $openAiCompatibleRouterConfigured = openai_base_url() !== 'https://api.openai.com/v1';
         $geminiViaRouterConfigured = $openAiCompatibleRouterConfigured && str_contains(strtolower(openai_model()), 'gemini');
 
+        $directImageConfigured = image_openai_api_key() !== '' || str_contains(image_base_url(), '127.0.0.1:20128') || str_contains(image_base_url(), 'localhost:20128');
+        $meigenConfigured = meigen_api_token() !== '';
+
         return [
             'openai_configured' => openai_api_key() !== '' || $openAiCompatibleRouterConfigured,
             'openai_router_configured' => $openAiCompatibleRouterConfigured,
@@ -110,13 +113,21 @@ SQL;
             'facebook_page_id_configured' => facebook_page_id() !== '',
             'facebook_access_token_configured' => facebook_page_access_token() !== '',
             'fanpage_api_ready' => facebook_page_id() !== '' && facebook_page_access_token() !== '',
+            'image_api_configured' => image_provider() === 'meigen' ? ($meigenConfigured || $directImageConfigured) : $directImageConfigured,
+            'video_configured' => video_provider() === 'local'
+                || (video_provider() === 'meigen' && meigen_api_token() !== '')
+                || (video_provider() === 'kling' && kling_access_key() !== '' && kling_secret_key() !== '')
+                || video_api_key() !== '',
+            'image_direct_configured' => $directImageConfigured,
+            'meigen_configured' => $meigenConfigured,
+            'telegram_configured' => telegram_bot_token() !== '' && telegram_chat_id() !== '',
         ];
     }
 
     private function defaults(): array
     {
         return [
-            'site_id' => APP_SITE_ID,
+            'site_id' => currentSiteId(),
             'default_campaign_code' => 'MVP-LAPTOP',
             'default_content_provider' => 'gemini',
             'default_channel' => 'fanpage_manual',
@@ -138,7 +149,7 @@ SQL;
         $allowedChannels = ['fanpage_manual', 'fanpage_api'];
 
         return [
-            'site_id' => APP_SITE_ID,
+            'site_id' => currentSiteId(),
             'default_campaign_code' => trim((string)($input['default_campaign_code'] ?? $fallback['default_campaign_code'])) ?: 'MVP-LAPTOP',
             'default_content_provider' => in_array((string)($input['default_content_provider'] ?? ''), $allowedProviders, true)
                 ? (string)$input['default_content_provider']
@@ -170,7 +181,7 @@ SQL;
     private function castRow(array $row): array
     {
         return [
-            'site_id' => (int)($row['site_id'] ?? APP_SITE_ID),
+            'site_id' => (int)($row['site_id'] ?? currentSiteId()),
             'default_campaign_code' => (string)($row['default_campaign_code'] ?? 'MVP-LAPTOP'),
             'default_content_provider' => (string)($row['default_content_provider'] ?? 'template_engine'),
             'default_channel' => (string)($row['default_channel'] ?? 'fanpage_manual'),
@@ -189,7 +200,7 @@ SQL;
     private function getExistingRow(): ?array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM automation_settings WHERE site_id = :site_id LIMIT 1');
-        $stmt->execute([':site_id' => APP_SITE_ID]);
+        $stmt->execute([':site_id' => currentSiteId()]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return is_array($row) ? $this->castRow($row) : null;
     }

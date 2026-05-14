@@ -1,0 +1,9 @@
+# Product Radar daily crawl — one category/day, slow and low request.
+# Install with: crontab workers/product-radar-daily.cron.sample
+# Logs: storage/logs/product-radar-daily.log
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# 02:30 UTC daily. Adjust category id per day if needed.
+30 2 * * * cd /home/dokien/.openclaw/workspace/MMO && /usr/bin/php scripts/product_radar_daily.php --site=1 --category=11035567 --pages=1 --limit=100 >> storage/logs/product-radar-daily.log 2>&1

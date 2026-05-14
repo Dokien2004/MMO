@@ -4,16 +4,11 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/ProductSyncService.php';
 require_once __DIR__ . '/TaskLogService.php';
-require_once __DIR__ . '/TikiScraperClient.php';
 
 /**
  * ScraperService — Cào dữ liệu sản phẩm bán chạy từ các sàn TMĐT.
  *
- * Hỗ trợ:
- * - Shopee: search theo keyword, trending theo danh mục, daily discover
- * - TikTok Shop: search theo keyword
- * - Lazada: search theo keyword
- * - Tiki: search theo keyword qua public products API
+ * Hỗ trợ Shopee qua live Chromium/CDP đã đăng nhập.
  *
  * Chế độ Trending: Cào top bán chạy KHÔNG cần nhập từ khóa.
  * Kết quả được đẩy vào ProductSyncService để lưu DB.
@@ -22,11 +17,10 @@ final class ScraperService
 {
     private ProductSyncService $productSyncService;
     private TaskLogService $taskLogService;
-    private TikiScraperClient $tikiScraperClient;
     private PDO $pdo;
 
-    /** Rate limit: tối thiểu N giây giữa mỗi request */
-    private float $requestDelay = 1.5;
+    /** Rate limit: tối thiểu N giây giữa mỗi request (cố tình chậm để giống người thật hơn) */
+    private float $requestDelay = 8.0;
 
     /** Max retry khi request fail */
     private int $maxRetries = 3;
@@ -41,6 +35,7 @@ final class ScraperService
     private string $cookieFile;
     private bool $shopeeSessionBootstrapped = false;
     private string $browserScriptPath;
+    private string $cloakBrowserScriptPath;
 
     /** Danh mục Shopee phổ biến (catid) để cào trending */
     public const SHOPEE_CATEGORIES = [
@@ -64,11 +59,12 @@ final class ScraperService
     {
         $this->productSyncService = new ProductSyncService();
         $this->taskLogService = new TaskLogService();
-        $this->tikiScraperClient = new TikiScraperClient();
         $this->pdo = db_pdo();
         $this->cookieFile = sys_get_temp_dir() . '/mmo_scraper_cookies.txt';
         $this->browserScriptPath = BASE_PATH . '/scripts/shopee_browser_scraper.js';
+        $this->cloakBrowserScriptPath = BASE_PATH . '/scripts/shopee_cloak_scraper.mjs';
         $this->ensureConfigTable();
+        $this->ensureMarketSnapshotTable();
     }
 
     /**
@@ -84,7 +80,7 @@ final class ScraperService
     public function allConfigs(): array
     {
         $stmt = $this->pdo->query(
-            'SELECT * FROM scraper_configs WHERE site_id = ' . APP_SITE_ID . ' ORDER BY updated_at DESC'
+            'SELECT * FROM scraper_configs WHERE site_id = ' . currentSiteId() . ' ORDER BY updated_at DESC'
         );
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
@@ -92,7 +88,7 @@ final class ScraperService
     public function findConfig(int $id): ?array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM scraper_configs WHERE id = :id AND site_id = :sid');
-        $stmt->execute([':id' => $id, ':sid' => APP_SITE_ID]);
+        $stmt->execute([':id' => $id, ':sid' => currentSiteId()]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
     }
@@ -122,7 +118,7 @@ final class ScraperService
             $stmt->execute([
                 ':kw' => $keyword, ':pl' => $platform, ':ms' => $minSold,
                 ':mp' => $maxPages, ':sb' => $sortBy, ':ia' => $isActive,
-                ':id' => $id, ':sid' => APP_SITE_ID,
+                ':id' => $id, ':sid' => currentSiteId(),
             ]);
             return $id;
         }
@@ -132,7 +128,7 @@ final class ScraperService
              VALUES (:sid, :kw, :pl, :ms, :mp, :sb, :ia)'
         );
         $stmt->execute([
-            ':sid' => APP_SITE_ID, ':kw' => $keyword, ':pl' => $platform,
+            ':sid' => currentSiteId(), ':kw' => $keyword, ':pl' => $platform,
             ':ms' => $minSold, ':mp' => $maxPages, ':sb' => $sortBy, ':ia' => $isActive,
         ]);
         return (int)$this->pdo->lastInsertId();
@@ -141,7 +137,7 @@ final class ScraperService
     public function deleteConfig(int $id): void
     {
         $stmt = $this->pdo->prepare('DELETE FROM scraper_configs WHERE id = :id AND site_id = :sid');
-        $stmt->execute([':id' => $id, ':sid' => APP_SITE_ID]);
+        $stmt->execute([':id' => $id, ':sid' => currentSiteId()]);
     }
 
     // ─── Main Scraping Logic ──────────────────────────
@@ -157,7 +153,7 @@ final class ScraperService
             throw new InvalidArgumentException("Config #{$configId} không tồn tại.");
         }
 
-        $platform = $config['platform'];
+        $platform = 'shopee';
         $keyword = $config['keyword'];
         $maxPages = (int)$config['max_pages'];
         $minSold = (int)$config['min_sold_count'];
@@ -199,6 +195,7 @@ final class ScraperService
         $syncResult = ['summary' => ['inserted_count' => 0, 'updated_count' => 0]];
         if (!empty($filtered)) {
             $syncResult = $this->productSyncService->syncBatch($platform, array_values($filtered));
+            $this->recordMarketSnapshots($syncResult['products'] ?? []);
         }
 
         // Cập nhật last_run
@@ -223,7 +220,7 @@ final class ScraperService
 
     /**
      * Cào trending 1 lần (không cần config) — endpoint nhanh cho UI.
-     * @param string   $platform    shopee|tiktokshop|lazada|tiki
+     * @param string   $platform    Luôn ép về shopee để dùng live CDP
      * @param int[]    $categoryIds Danh mục Shopee catid (rỗng = tất cả)
      * @param int      $minSold     Ngưỡng lượt mua tối thiểu
      * @param int      $maxPages    Số trang mỗi danh mục
@@ -242,6 +239,7 @@ final class ScraperService
         $syncResult = ['summary' => ['inserted_count' => 0, 'updated_count' => 0]];
         if (!empty($filtered)) {
             $syncResult = $this->productSyncService->syncBatch($platform, array_values($filtered));
+            $this->recordMarketSnapshots($syncResult['products'] ?? []);
         }
 
         $this->taskLogService->create('scraper_trending', empty($errors) ? 'success' : 'failed', [
@@ -307,6 +305,245 @@ final class ScraperService
         ];
     }
 
+    /**
+     * Product Radar: dùng dữ liệu đã cào như tín hiệu thị trường, không chỉ lưu sản phẩm thô.
+     * Trả về danh sách cơ hội có chấm điểm, nhu cầu, đối tượng và góc content affiliate.
+     */
+    public function buildProductRadar(int $limit = 12): array
+    {
+        $limit = max(3, min(30, $limit));
+        $products = $this->productSyncService->topSellingProducts($limit, 0);
+        $this->recordMarketSnapshots($products);
+        $opportunities = [];
+
+        foreach ($products as $product) {
+            $opportunities[] = $this->scoreProductOpportunity($product);
+        }
+
+        usort($opportunities, static fn(array $a, array $b): int => (int)$b['score'] <=> (int)$a['score']);
+
+        return [
+            'generated_at' => date('c'),
+            'source' => 'Shopee slow crawl + DB sản phẩm site hiện tại + heuristic affiliate scoring',
+            'count' => count($opportunities),
+            'opportunities' => $opportunities,
+            'github_repos' => $this->githubResearchRepos(),
+            'notes' => [
+                'Điểm cao không đảm bảo có hoa hồng; cần kiểm tra chính sách Shopee Affiliate và biên lợi nhuận.',
+                'Nên chọn sản phẩm có nhu cầu rõ, dễ làm video/review, ít rủi ro hoàn hàng.',
+                'Repo/công cụ bên dưới dùng để học ý tưởng phân tích dữ liệu, review/sentiment và crawler — không copy mù quáng vào production.',
+            ],
+        ];
+    }
+
+    private function scoreProductOpportunity(array $product): array
+    {
+        $name = (string)($product['product_name'] ?? '');
+        $lower = mb_strtolower($name, 'UTF-8');
+        $sold = (int)($product['sold_count'] ?? 0);
+        $price = (float)($product['price'] ?? 0);
+        $metrics = $this->marketMetrics($product);
+
+        $runRateScore = $metrics['run_rate_7d'] > 0
+            ? min(35, (int)round(log10(max(1, $metrics['run_rate_7d'])) * 14))
+            : min(20, (int)round(log10(max(1, $sold)) * 5));
+        $demandScore = min(30, (int)round(log10(max(1, $sold)) * 8));
+        $priceScore = $price <= 0 ? 10 : ($price >= 30000 && $price <= 350000 ? 20 : ($price < 30000 ? 12 : 14));
+        $contentScore = $this->containsAny($lower, ['áo', 'quần', 'túi', 'đèn', 'máy', 'tai nghe', 'bình', 'kệ', 'mỹ phẩm', 'cotton', 'basic', 'cleanfit']) ? 20 : 12;
+        $riskPenalty = $this->containsAny($lower, ['fake', 'rep', '1:1', 'thuốc', 'giảm cân', 'trị', 'chữa', 'sex']) ? 18 : 0;
+        $reviewPenalty = $metrics['review_signal'] === 'Nghi vấn buff: bán cao nhưng review quá thấp' ? 12 : 0;
+        $pricePenalty = $metrics['price_signal'] === 'Biến động giá mạnh / có thể đang flash sale hoặc phá giá' ? 8 : 0;
+        $score = max(0, min(100, $runRateScore + $demandScore + $priceScore + $contentScore + 10 - $riskPenalty - $reviewPenalty - $pricePenalty));
+
+        return [
+            'product_id' => (int)($product['id'] ?? 0),
+            'name' => $name,
+            'url' => (string)($product['product_url'] ?? ''),
+            'affiliate_url' => (string)($product['affiliate_url'] ?? ''),
+            'sold_count' => $sold,
+            'price' => $price,
+            'score' => $score,
+            'run_rate_7d' => $metrics['run_rate_7d'],
+            'run_rate_30d' => $metrics['run_rate_30d'],
+            'growth_7d' => $metrics['growth_7d'],
+            'review_count' => $metrics['review_count'],
+            'review_ratio' => $metrics['review_ratio'],
+            'review_signal' => $metrics['review_signal'],
+            'price_change_pct' => $metrics['price_change_pct'],
+            'price_signal' => $metrics['price_signal'],
+            'keyword_signal' => $metrics['keyword_signal'],
+            'demand' => $this->demandLabel($sold),
+            'target_audience' => $this->targetAudience($lower),
+            'why_hot' => $this->whyHot($lower, $sold, $price),
+            'content_angle' => $this->contentAngle($lower),
+            'risk' => $riskPenalty > 0 ? 'Cần kiểm tra kỹ claim/nhãn hiệu/chính sách sàn trước khi quảng bá.' : 'Rủi ro vừa phải; vẫn cần xem review thật và shop uy tín.',
+            'next_action' => $score >= 75 ? 'Ưu tiên lấy link affiliate thật/test content video ngắn.' : ($score >= 55 ? 'Theo dõi thêm review/giá và test 1 bài content.' : 'Chưa ưu tiên, chỉ giữ làm ý tưởng.'),
+        ];
+    }
+
+    private function containsAny(string $text, array $needles): bool
+    {
+        foreach ($needles as $needle) {
+            if ($needle !== '' && str_contains($text, $needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function demandLabel(int $sold): string
+    {
+        if ($sold >= 100000) return 'Rất cao / mass market';
+        if ($sold >= 10000) return 'Cao / đã chứng minh nhu cầu';
+        if ($sold >= 1000) return 'Khá / có traction';
+        if ($sold >= 100) return 'Ngách nhỏ / cần test thêm';
+        return 'Chưa đủ tín hiệu';
+    }
+
+    private function targetAudience(string $name): string
+    {
+        if ($this->containsAny($name, ['áo', 'quần', 'cleanfit', 'cotton', 'basic'])) return 'Nam/nữ 16–30, học sinh/sinh viên/người đi làm thích đồ basic, giá vừa phải.';
+        if ($this->containsAny($name, ['mẹ', 'bé', 'trẻ em'])) return 'Phụ huynh trẻ, mẹ bỉm, gia đình có con nhỏ.';
+        if ($this->containsAny($name, ['máy', 'điện', 'tai nghe', 'sạc'])) return 'Người dùng công nghệ, dân văn phòng/sinh viên cần đồ tiện ích.';
+        if ($this->containsAny($name, ['kệ', 'bếp', 'đèn', 'nhà'])) return 'Người thuê trọ/gia đình trẻ thích tối ưu không gian sống.';
+        return 'Người mua phổ thông; cần đọc review để chia nhỏ chân dung khách hàng.';
+    }
+
+    private function whyHot(string $name, int $sold, float $price): string
+    {
+        $signals = [];
+        if ($sold >= 10000) $signals[] = 'lượt bán lớn chứng minh nhu cầu thật';
+        if ($price > 0 && $price <= 350000) $signals[] = 'giá dễ ra quyết định';
+        if ($this->containsAny($name, ['basic', 'cleanfit', 'cotton', 'trơn'])) $signals[] = 'style basic/dễ phối, tệp khách rộng';
+        if (empty($signals)) $signals[] = 'có tín hiệu từ dữ liệu crawl nhưng cần kiểm tra thêm review/độ cạnh tranh';
+        return implode('; ', $signals) . '.';
+    }
+
+    private function contentAngle(string $name): string
+    {
+        if ($this->containsAny($name, ['áo', 'quần', 'cleanfit', 'cotton'])) return 'Video thử mặc thật: trước/sau khi phối đồ, chất vải, form dáng, giặt có bai không.';
+        if ($this->containsAny($name, ['máy', 'tai nghe', 'sạc'])) return 'Video test thực tế: unbox, đo hiệu quả, so sánh trước/sau, lỗi cần biết.';
+        if ($this->containsAny($name, ['kệ', 'bếp', 'đèn', 'nhà'])) return 'Video setup góc phòng/bàn làm việc, giải quyết pain-point chật/bừa/thiếu sáng.';
+        return 'Bài review ngắn: vấn đề khách gặp → sản phẩm giải quyết → bằng chứng/review → CTA săn deal.';
+    }
+
+    private function githubResearchRepos(): array
+    {
+        return [
+            ['name' => 'dtungpka/shopee-scraper', 'url' => 'https://github.com/dtungpka/shopee-scraper', 'use' => 'Tham khảo cách lấy product/review Shopee để bổ sung tín hiệu review.'],
+            ['name' => 'AvazAsgarov/streamlit-e-commerce-dashboard', 'url' => 'https://github.com/AvazAsgarov/streamlit-e-commerce-dashboard', 'use' => 'Tham khảo dashboard Streamlit/Pandas cho sales trend, filters, export.'],
+            ['name' => 'GbollyAnaltic/ecommerce-dashboard', 'url' => 'https://github.com/GbollyAnaltic/ecommerce-dashboard', 'use' => 'Tham khảo KPI/dashboard realtime cho phân tích sản phẩm và doanh số.'],
+            ['name' => 'GitHub topic: ecommerce-analysis', 'url' => 'https://github.com/topics/ecommerce-analysis', 'use' => 'Học mô hình phân tích sales, cohort, category trend cho dashboard.'],
+            ['name' => 'GitHub topic: market-research', 'url' => 'https://github.com/topics/market-research', 'use' => 'Tìm ý tưởng framework nghiên cứu thị trường và report tự động.'],
+            ['name' => 'CloakHQ/CloakBrowser', 'url' => 'https://github.com/CloakHQ/CloakBrowser', 'use' => 'Đã áp dụng cho crawl chậm, profile bền, giảm verify khi lấy tín hiệu công khai.'],
+            ['name' => 'oxylabs/lazada-scraper', 'url' => 'https://github.com/oxylabs/lazada-scraper', 'use' => 'Tham khảo schema dữ liệu marketplace nếu sau này so sánh đa sàn.'],
+        ];
+    }
+
+    private function marketMetrics(array $product): array
+    {
+        $productId = (int)($product['id'] ?? 0);
+        $sold = (int)($product['sold_count'] ?? 0);
+        $price = (float)($product['price'] ?? 0);
+        $reviewCount = (int)($product['review_count'] ?? $product['rating_count'] ?? 0);
+
+        $snapshots = $productId > 0 ? $this->snapshotsForProduct($productId, 30) : [];
+        $old7 = $this->oldestSnapshotAtLeastDays($snapshots, 7);
+        $old30 = $this->oldestSnapshotAtLeastDays($snapshots, 30) ?: (end($snapshots) ?: null);
+
+        $delta7 = $old7 ? max(0, $sold - (int)$old7['sold_count']) : 0;
+        $delta30 = $old30 ? max(0, $sold - (int)$old30['sold_count']) : 0;
+        $run7 = $old7 ? round($delta7 / max(1, $this->daysBetween((string)$old7['captured_at'], date('c'))), 1) : 0.0;
+        $run30 = $old30 ? round($delta30 / max(1, $this->daysBetween((string)$old30['captured_at'], date('c'))), 1) : 0.0;
+        $growth7 = $old7 && (int)$old7['sold_count'] > 0 ? round((($sold - (int)$old7['sold_count']) / (int)$old7['sold_count']) * 100, 1) : null;
+
+        $oldPrice = $old30 ? (float)$old30['price'] : 0.0;
+        $priceChangePct = ($oldPrice > 0 && $price > 0) ? round((($price - $oldPrice) / $oldPrice) * 100, 1) : null;
+        $reviewRatio = $sold > 0 && $reviewCount > 0 ? round(($reviewCount / $sold) * 100, 1) : null;
+
+        return [
+            'run_rate_7d' => $run7,
+            'run_rate_30d' => $run30,
+            'growth_7d' => $growth7,
+            'review_count' => $reviewCount,
+            'review_ratio' => $reviewRatio,
+            'review_signal' => $this->reviewSignal($sold, $reviewCount, $reviewRatio),
+            'price_change_pct' => $priceChangePct,
+            'price_signal' => $this->priceSignal($priceChangePct),
+            'keyword_signal' => 'Chưa nối Google Trends/Shopee suggest; đang dùng tên sản phẩm + sold làm tín hiệu nền.',
+        ];
+    }
+
+    private function reviewSignal(int $sold, int $reviewCount, ?float $ratio): string
+    {
+        if ($reviewCount <= 0) return 'Chưa có dữ liệu review; cần crawl review_count để phát hiện buff đơn.';
+        if ($sold >= 1000 && ($ratio ?? 0) < 3) return 'Nghi vấn buff: bán cao nhưng review quá thấp';
+        if (($ratio ?? 0) >= 8 && ($ratio ?? 0) <= 25) return 'Tỷ lệ review/sold khá tự nhiên';
+        return 'Tỷ lệ review/sold cần kiểm tra thêm theo ngành hàng';
+    }
+
+    private function priceSignal(?float $priceChangePct): string
+    {
+        if ($priceChangePct === null) return 'Chưa đủ lịch sử giá; cần gom snapshot vài ngày.';
+        if (abs($priceChangePct) >= 25) return 'Biến động giá mạnh / có thể đang flash sale hoặc phá giá';
+        if (abs($priceChangePct) >= 10) return 'Giá có biến động vừa, nên theo dõi thêm';
+        return 'Giá tương đối ổn định';
+    }
+
+    private function snapshotsForProduct(int $productId, int $days): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM product_market_snapshots WHERE site_id = :site_id AND product_id = :product_id AND captured_at >= DATE_SUB(NOW(), INTERVAL :days DAY) ORDER BY captured_at DESC'
+        );
+        $stmt->bindValue(':site_id', currentSiteId(), PDO::PARAM_INT);
+        $stmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
+        $stmt->bindValue(':days', $days, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    private function oldestSnapshotAtLeastDays(array $snapshots, int $days): ?array
+    {
+        $threshold = time() - ($days * 86400);
+        $fallback = null;
+        foreach ($snapshots as $snapshot) {
+            $fallback = $snapshot;
+            if (strtotime((string)$snapshot['captured_at']) <= $threshold) {
+                return $snapshot;
+            }
+        }
+        return $days <= 7 ? $fallback : null;
+    }
+
+    private function daysBetween(string $from, string $to): float
+    {
+        $seconds = max(1, strtotime($to) - strtotime($from));
+        return max(1.0, $seconds / 86400);
+    }
+
+    private function recordMarketSnapshots(array $products): void
+    {
+        if (empty($products)) return;
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO product_market_snapshots (site_id, product_id, source_platform, source_product_id, price, sold_count, review_count, rating, captured_at)
+             VALUES (:site_id, :product_id, :source_platform, :source_product_id, :price, :sold_count, :review_count, :rating, NOW())'
+        );
+        foreach ($products as $product) {
+            $productId = (int)($product['id'] ?? 0);
+            if ($productId <= 0) continue;
+            $stmt->execute([
+                ':site_id' => currentSiteId(),
+                ':product_id' => $productId,
+                ':source_platform' => (string)($product['source_platform'] ?? 'shopee'),
+                ':source_product_id' => (string)($product['source_product_id'] ?? ''),
+                ':price' => (float)($product['price'] ?? 0),
+                ':sold_count' => (int)($product['sold_count'] ?? 0),
+                ':review_count' => (int)($product['review_count'] ?? $product['rating_count'] ?? 0),
+                ':rating' => (float)($product['rating'] ?? 0),
+            ]);
+        }
+    }
+
     // ─── Trending Scrapers (Không cần keyword) ─────────
 
     /**
@@ -317,16 +554,8 @@ final class ScraperService
         $allProducts = [];
 
         if ($platform === 'shopee') {
-            // 1. Daily Discover (sản phẩm gợi ý hot)
-            try {
-                $discover = $this->scrapeShopeeDiscover($maxPages);
-                $allProducts = array_merge($allProducts, $discover);
-            } catch (\Throwable $e) {
-                $errors[] = 'Discover: ' . $e->getMessage();
-            }
-            usleep((int)($this->requestDelay * 1_000_000));
-
-            // 2. Top bán chạy theo từng danh mục
+            // Cào Top bán chạy theo danh mục bằng Chromium/CloakBrowser chậm, ít request.
+            // Bỏ Daily Discover vì endpoint này hay kích hoạt traffic verification.
             $cats = !empty($categoryIds) ? $categoryIds : array_keys(self::SHOPEE_CATEGORIES);
             foreach ($cats as $catId) {
                 $catName = self::SHOPEE_CATEGORIES[$catId] ?? "Cat#{$catId}";
@@ -341,17 +570,7 @@ final class ScraperService
                 }
             }
         } else {
-            // Fallback: dùng các keyword phổ biến để cào trending
-            $trendingKeywords = ['bán chạy', 'hot deal', 'giảm giá sốc', 'freeship', 'best seller'];
-            foreach ($trendingKeywords as $kw) {
-                try {
-                    $products = $this->scrapeSearchPage($platform, $kw, 1, 'sold');
-                    $allProducts = array_merge($allProducts, $products);
-                } catch (\Throwable $e) {
-                    $errors[] = "Keyword '{$kw}': {$e->getMessage()}";
-                }
-                usleep((int)($this->requestDelay * 1_000_000));
-            }
+            $errors[] = 'Hệ thống hiện chỉ bật cào Shopee qua live CDP.';
         }
 
         // Deduplicate theo source_product_id
@@ -435,18 +654,27 @@ final class ScraperService
      */
     private function scrapeShopeeCategory(int $catId, int $page = 1): array
     {
-        $browserResults = $this->runShopeeBrowserJobs([[
-            'type' => 'category',
-            'categoryId' => $catId,
-            'categoryName' => self::SHOPEE_CATEGORIES[$catId] ?? "Cat#{$catId}",
-            'page' => $page,
-        ]]);
-        $browserResult = $browserResults[0] ?? null;
-        if (is_array($browserResult) && empty($browserResult['error'])) {
-            return $browserResult['products'] ?? [];
+        $browserError = null;
+        try {
+            $browserResults = $this->runShopeeBrowserJobs([[
+                'type' => 'category',
+                'categoryId' => $catId,
+                'categoryName' => self::SHOPEE_CATEGORIES[$catId] ?? "Cat#{$catId}",
+                'page' => $page,
+            ]]);
+            $browserResult = $browserResults[0] ?? null;
+            if (is_array($browserResult) && empty($browserResult['error'])) {
+                return $browserResult['products'] ?? [];
+            }
+            if (is_array($browserResult) && !empty($browserResult['error'])) {
+                $browserError = (string)$browserResult['error'];
+            }
+        } catch (\Throwable $e) {
+            $browserError = $e->getMessage();
         }
-        if (is_array($browserResult) && !empty($browserResult['error'])) {
-            throw new RuntimeException((string)$browserResult['error']);
+
+        if ($this->shouldUseCloakBrowser() && $browserError !== null) {
+            throw new RuntimeException($browserError);
         }
 
         $offset = ($page - 1) * 60;
@@ -461,12 +689,16 @@ final class ScraperService
             'version' => 2,
         ]);
 
-        $body = $this->httpGet($url, [
-            'Referer: https://shopee.vn/',
-            'Accept: application/json',
-            'X-Shopee-Language: vi',
-            'X-API-SOURCE: pc',
-        ]);
+        try {
+            $body = $this->httpGet($url, [
+                'Referer: https://shopee.vn/',
+                'Accept: application/json',
+                'X-Shopee-Language: vi',
+                'X-API-SOURCE: pc',
+            ]);
+        } catch (\Throwable $e) {
+            throw new RuntimeException($browserError ?: $e->getMessage());
+        }
 
         $data = json_decode($body, true);
         $items = $data['items'] ?? [];
@@ -476,6 +708,9 @@ final class ScraperService
         foreach ($items as $item) {
             $parsed = $this->parseShopeeItem($item['item_basic'] ?? $item, "Shopee [{$catName}]");
             if ($parsed) $products[] = $parsed;
+        }
+        if (empty($products) && $browserError !== null) {
+            throw new RuntimeException($browserError);
         }
         return $products;
     }
@@ -514,18 +749,27 @@ final class ScraperService
 
     private function scrapeShopee(string $keyword, int $page, string $sortBy): array
     {
-        $browserResults = $this->runShopeeBrowserJobs([[
-            'type' => 'search',
-            'keyword' => $keyword,
-            'page' => $page,
-            'sortBy' => $sortBy,
-        ]]);
-        $browserResult = $browserResults[0] ?? null;
-        if (is_array($browserResult) && empty($browserResult['error'])) {
-            return $browserResult['products'] ?? [];
+        $browserError = null;
+        try {
+            $browserResults = $this->runShopeeBrowserJobs([[
+                'type' => 'search',
+                'keyword' => $keyword,
+                'page' => $page,
+                'sortBy' => $sortBy,
+            ]]);
+            $browserResult = $browserResults[0] ?? null;
+            if (is_array($browserResult) && empty($browserResult['error'])) {
+                return $browserResult['products'] ?? [];
+            }
+            if (is_array($browserResult) && !empty($browserResult['error'])) {
+                $browserError = (string)$browserResult['error'];
+            }
+        } catch (\Throwable $e) {
+            $browserError = $e->getMessage();
         }
-        if (is_array($browserResult) && !empty($browserResult['error'])) {
-            throw new RuntimeException((string)$browserResult['error']);
+
+        if ($this->shouldUseCloakBrowser() && $browserError !== null) {
+            throw new RuntimeException($browserError);
         }
 
         $offset = ($page - 1) * 60;
@@ -547,12 +791,16 @@ final class ScraperService
             'version' => 2,
         ]);
 
-        $body = $this->httpGet($url, [
-            'Referer: https://shopee.vn/',
-            'Accept: application/json',
-            'X-Shopee-Language: vi',
-            'X-API-SOURCE: pc',
-        ]);
+        try {
+            $body = $this->httpGet($url, [
+                'Referer: https://shopee.vn/',
+                'Accept: application/json',
+                'X-Shopee-Language: vi',
+                'X-API-SOURCE: pc',
+            ]);
+        } catch (\Throwable $e) {
+            throw new RuntimeException($browserError ?: $e->getMessage());
+        }
 
         $data = json_decode($body, true);
         $items = $data['items'] ?? $data['item_basic'] ?? [];
@@ -575,6 +823,10 @@ final class ScraperService
                 'sold_count' => $soldCount,
                 'notes' => 'Scraped from Shopee search',
             ];
+        }
+
+        if (empty($products) && $browserError !== null) {
+            throw new RuntimeException($browserError);
         }
 
         return $products;
@@ -809,19 +1061,38 @@ final class ScraperService
 
     private function runShopeeBrowserJobs(array $jobs): array
     {
-        if (!file_exists($this->browserScriptPath)) {
-            return [];
-        }
-
         if (!function_exists('proc_open')) {
             return [];
         }
 
+        $useCloakBrowser = $this->shouldUseCloakBrowser();
+        $scriptPath = $useCloakBrowser ? $this->cloakBrowserScriptPath : $this->browserScriptPath;
+        if (!file_exists($scriptPath)) {
+            return [];
+        }
+
         $nodeBinary = $this->findNodeBinary();
+        $liveCdpUrl = $useCloakBrowser ? null : $this->discoverLiveCdpUrl();
+        $profileDir = trim((string)(getenv('SHOPEE_USER_DATA_DIR') ?: ''));
+        if ($profileDir === '') {
+            $defaultChromeProfile = rtrim((string)(getenv('HOME') ?: '/home/dokien'), '/') . '/.config/google-chrome';
+            $profileDir = is_dir($defaultChromeProfile)
+                ? $defaultChromeProfile
+                : STORAGE_PATH . '/browser/shopee-profile';
+        }
         $payload = json_encode([
             'jobs' => array_values($jobs),
-            'userDataDir' => STORAGE_PATH . '/browser/shopee-profile',
-            'headless' => getenv('SHOPEE_BROWSER_HEADLESS') !== '0',
+            // Use the user's real Chrome profile by default so a completed login
+            // in RustDesk/Chrome can be reused by the scraper. The Node script
+            // copies the profile to a temp dir, so it can work even if Chrome is open.
+            'userDataDir' => $profileDir,
+            // Optional: if SHOPEE_LIVE_CDP_URL is configured, attach to that live browser.
+            // Otherwise the Node scraper launches its own Chromium on a free port.
+            'cdpUrl' => $liveCdpUrl,
+            // Default to visible Chrome because Shopee often blocks headless.
+            // Set SHOPEE_HEADLESS=1 only when you explicitly want headless mode.
+            'headless' => $useCloakBrowser ? getenv('SHOPEE_CLOAK_HEADLESS') !== '0' : getenv('SHOPEE_HEADLESS') === '1',
+            'limit' => (int)(getenv('SHOPEE_CLOAK_LIMIT') ?: 12),
         ], JSON_UNESCAPED_UNICODE);
 
         if ($payload === false) {
@@ -835,7 +1106,7 @@ final class ScraperService
         ];
 
         $process = proc_open(
-            [$nodeBinary, $this->browserScriptPath, $payload],
+            [$nodeBinary, $scriptPath, $payload],
             $descriptorSpec,
             $pipes,
             BASE_PATH,
@@ -866,6 +1137,17 @@ final class ScraperService
         return $decoded['results'];
     }
 
+    private function shouldUseCloakBrowser(): bool
+    {
+        $engine = strtolower(trim((string)(getenv('SHOPEE_BROWSER_ENGINE') ?: 'cloak')));
+        if (in_array($engine, ['legacy', 'cdp', 'chrome'], true)) {
+            return false;
+        }
+        return file_exists($this->cloakBrowserScriptPath)
+            && is_dir(BASE_PATH . '/node_modules/cloakbrowser')
+            && is_dir(BASE_PATH . '/node_modules/playwright-core');
+    }
+
     private function findNodeBinary(): string
     {
         $candidates = [
@@ -886,6 +1168,142 @@ final class ScraperService
         return 'node';
     }
 
+    public function ensureShopeeLiveBrowser(): ?string
+    {
+        $existing = $this->discoverLiveCdpUrl();
+        if ($existing !== null) {
+            return $existing;
+        }
+
+        $port = $this->getFreeTcpPort();
+        if ($port <= 0) {
+            return null;
+        }
+
+        $chrome = null;
+        foreach (['/opt/google/chrome/chrome', '/usr/bin/google-chrome', '/usr/bin/chromium-browser', '/usr/bin/chromium'] as $candidate) {
+            if (is_file($candidate) && is_executable($candidate)) {
+                $chrome = $candidate;
+                break;
+            }
+        }
+        if ($chrome === null) {
+            return null;
+        }
+
+        $profileDir = STORAGE_PATH . '/browser/shopee-live-profile';
+        if (!is_dir($profileDir)) {
+            mkdir($profileDir, 0755, true);
+        }
+
+        $logFile = STORAGE_PATH . '/logs/shopee_live_browser.log';
+        $display = getenv('DISPLAY') ?: ':1';
+        $runtimeDir = getenv('XDG_RUNTIME_DIR') ?: '/run/user/' . getmyuid();
+
+        $args = [
+            escapeshellarg($chrome),
+            '--remote-debugging-address=127.0.0.1',
+            '--remote-debugging-port=' . $port,
+            '--user-data-dir=' . escapeshellarg($profileDir),
+            '--no-first-run',
+            '--no-default-browser-check',
+            '--disable-blink-features=AutomationControlled',
+            '--disable-popup-blocking',
+            '--window-size=1365,900',
+            '--lang=vi-VN',
+            '--no-sandbox',
+            escapeshellarg('https://shopee.vn/'),
+        ];
+
+        $cmd = 'DISPLAY=' . escapeshellarg($display)
+            . ' XDG_RUNTIME_DIR=' . escapeshellarg($runtimeDir)
+            . ' nohup ' . implode(' ', $args)
+            . ' > ' . escapeshellarg($logFile) . ' 2>&1 & echo $!';
+        @exec($cmd, $out);
+
+        $cdpUrl = 'http://127.0.0.1:' . $port;
+        file_put_contents(STORAGE_PATH . '/data/shopee_live_browser.json', json_encode([
+            'cdpUrl' => $cdpUrl,
+            'profileDir' => $profileDir,
+            'pid' => isset($out[0]) ? (int)$out[0] : null,
+            'started_at' => date('c'),
+        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), LOCK_EX);
+
+        for ($i = 0; $i < 20; $i++) {
+            usleep(250000);
+            if ($this->isCdpAlive($cdpUrl)) {
+                return $cdpUrl;
+            }
+        }
+
+        return $cdpUrl;
+    }
+
+    private function getFreeTcpPort(): int
+    {
+        $socket = @stream_socket_server('tcp://127.0.0.1:0', $errno, $errstr);
+        if (!$socket) {
+            return 0;
+        }
+        $name = stream_socket_get_name($socket, false);
+        fclose($socket);
+        if (is_string($name) && preg_match('/:(\d+)$/', $name, $m)) {
+            return (int)$m[1];
+        }
+        return 0;
+    }
+
+    private function discoverLiveCdpUrl(): ?string
+    {
+        $configured = trim((string)(getenv('SHOPEE_LIVE_CDP_URL') ?: ''));
+        if ($configured !== '' && $this->isCdpAlive($configured)) {
+            return rtrim($configured, '/');
+        }
+
+        $stateFile = STORAGE_PATH . '/data/shopee_live_browser.json';
+        if (is_file($stateFile)) {
+            $state = json_decode((string)file_get_contents($stateFile), true);
+            $stateCdp = is_array($state) ? (string)($state['cdpUrl'] ?? '') : '';
+            if ($stateCdp !== '' && $this->isCdpAlive($stateCdp)) {
+                return rtrim($stateCdp, '/');
+            }
+        }
+
+        $out = [];
+        @exec("pgrep -af 'remote-debugging-port' 2>/dev/null", $out);
+        foreach ($out as $line) {
+            if (preg_match('/--remote-debugging-port(?:=|\s+)(\d+)/', $line, $m)) {
+                $candidate = 'http://127.0.0.1:' . $m[1];
+                if ($this->isCdpAlive($candidate)) {
+                    return $candidate;
+                }
+            }
+        }
+
+        // Backward-compatible common ports, but none is required.
+        foreach ([19333, 9222, 9223, 9224] as $port) {
+            $candidate = 'http://127.0.0.1:' . $port;
+            if ($this->isCdpAlive($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function isCdpAlive(string $cdpUrl): bool
+    {
+        $ch = curl_init(rtrim($cdpUrl, '/') . '/json/version');
+        curl_setopt_array($ch, [
+            CURLOPT_TIMEOUT => 2,
+            CURLOPT_RETURNTRANSFER => true,
+        ]);
+        curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        return $httpCode === 200;
+    }
+
     // ─── Helpers ──────────────────────────────────────
 
     private function updateLastRun(int $configId, array $all, array $filtered, array $syncResult, array $errors): void
@@ -901,12 +1319,12 @@ final class ScraperService
             'synced_updated' => $syncResult['summary']['updated_count'],
             'errors' => $errors,
         ], JSON_UNESCAPED_UNICODE);
-        $stmt->execute([':res' => $resultJson, ':id' => $configId, ':sid' => APP_SITE_ID]);
+        $stmt->execute([':res' => $resultJson, ':id' => $configId, ':sid' => currentSiteId()]);
     }
 
     private function sanitizePlatform(string $platform): string
     {
-        return in_array($platform, ['shopee', 'tiktokshop', 'lazada', 'tiki'], true) ? $platform : 'shopee';
+        return 'shopee';
     }
 
     private function ensureConfigTable(): void
@@ -930,5 +1348,87 @@ CREATE TABLE IF NOT EXISTS scraper_configs (
     KEY idx_scraper_platform (platform)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);
+    }
+
+    private function ensureMarketSnapshotTable(): void
+    {
+        $this->pdo->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS product_market_snapshots (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    site_id INT NOT NULL DEFAULT 1,
+    product_id BIGINT UNSIGNED NOT NULL,
+    source_platform VARCHAR(50) NOT NULL,
+    source_product_id VARCHAR(100) NOT NULL,
+    price DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+    sold_count INT UNSIGNED NOT NULL DEFAULT 0,
+    review_count INT UNSIGNED NOT NULL DEFAULT 0,
+    rating DECIMAL(3,2) NOT NULL DEFAULT 0.00,
+    captured_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_market_snapshots_product_time (site_id, product_id, captured_at),
+    KEY idx_market_snapshots_source_time (site_id, source_platform, source_product_id, captured_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL);
+    }
+
+    public function checkShopeeSession(): array
+    {
+        $cdpUrl = $this->discoverLiveCdpUrl();
+
+        if ($cdpUrl === null) {
+            return [
+                'alive'       => false,
+                'has_session' => false,
+                'captcha_required' => false,
+                'optional'    => true,
+                'message'     => 'Không có live CDP đang chạy — scraper sẽ tự mở Chrome riêng trên cổng ngẫu nhiên khi cào.',
+            ];
+        }
+
+        // Detect active Shopee verification/captcha tabs. Do NOT treat missing
+        // cookies as captcha: SQLite cookie files are encrypted/locked and are
+        // not a reliable login signal while Chromium is running.
+        $captchaRequired = false;
+        $shopeeTabFound = false;
+        $tabSummary = [];
+        $ch = curl_init($cdpUrl . '/json/list');
+        curl_setopt_array($ch, [
+            CURLOPT_TIMEOUT => 5,
+            CURLOPT_RETURNTRANSFER => true,
+        ]);
+        $tabsRaw = curl_exec($ch);
+        $tabsCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($tabsCode === 200 && is_string($tabsRaw) && $tabsRaw !== '') {
+            $tabs = json_decode($tabsRaw, true);
+            if (is_array($tabs)) {
+                foreach ($tabs as $tab) {
+                    if (!is_array($tab)) continue;
+                    $url = (string)($tab['url'] ?? '');
+                    $title = (string)($tab['title'] ?? '');
+                    if (str_contains($url, 'shopee.vn')) {
+                        $shopeeTabFound = true;
+                        $tabSummary[] = trim($title) !== '' ? $title : $url;
+                    }
+
+                    $haystack = strtolower($url . ' ' . $title);
+                    if (preg_match('#shopee\.vn/.*/?verify/(traffic|captcha)|shopee\.vn/verify/(traffic|captcha)|captcha|xác minh|verify your account|unusual traffic#i', $haystack)) {
+                        $captchaRequired = true;
+                    }
+                }
+            }
+        }
+
+        return [
+            'alive'       => true,
+            'has_session' => true,
+            'captcha_required' => $captchaRequired,
+            'shopee_tab_found' => $shopeeTabFound,
+            'tabs' => $tabSummary,
+            'message'     => $captchaRequired
+                ? 'Shopee đang yêu cầu xác minh captcha/verify.'
+                : ($shopeeTabFound ? 'Browser Shopee đang mở, chưa thấy captcha.' : 'Browser CDP đang chạy, chưa thấy tab Shopee bị captcha.'),
+        ];
     }
 }

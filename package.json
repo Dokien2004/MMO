@@ -4,6 +4,8 @@
   "private": true,
   "description": "Browser-backed scraper helpers for MMO affiliate project",
   "dependencies": {
+    "cloakbrowser": "^0.3.28",
+    "playwright-core": "^1.57.0",
     "puppeteer-core": "^24.9.0"
   }
 }

@@ -33,7 +33,7 @@ $coreModules = ['DASHBOARD', 'ADMIN'];
 </div>
 
 <div class="card">
-    <div class="card-title">📦 Danh sách modules</div>
+    <div class="card-title">Danh sách modules</div>
 
     <?php if (empty($modules)): ?>
         <div class="empty-state">

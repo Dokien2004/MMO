@@ -4,7 +4,7 @@
  */
 ?>
 <div style="text-align:center; padding: 80px 20px;">
-    <div style="font-size: 64px; margin-bottom: 16px; opacity: 0.3;">🔒</div>
+    <div style="font-size: 64px; margin-bottom: 16px; opacity: 0.3;"></div>
     <h2 style="font-size: 22px; font-weight: 600; margin-bottom: 8px;">Từ chối truy cập</h2>
     <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 24px;">
         Bạn không có quyền thực hiện thao tác này.

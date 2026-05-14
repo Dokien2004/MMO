@@ -18,7 +18,7 @@
 
     <div class="grid-2" style="align-items: start;">
         <div class="card">
-            <div class="card-title">👤 Thông tin tài khoản</div>
+            <div class="card-title">Thông tin tài khoản</div>
 
             <div class="form-group">
                 <label class="form-label">Họ và tên</label>
@@ -63,7 +63,7 @@
                 Mật khẩu chỉ thay đổi khi bạn nhập giá trị mới ở phần bên dưới.
             </div>
 
-            <div class="card-title" style="margin-top: 24px;">🔐 Đổi mật khẩu</div>
+            <div class="card-title" style="margin-top: 24px;">Đổi mật khẩu</div>
 
             <div class="grid-2">
                 <div class="form-group">
@@ -89,7 +89,7 @@
         </div>
 
         <div class="card">
-            <div class="card-title">🛡️ Phân quyền & site</div>
+            <div class="card-title">Phân quyền & site</div>
 
             <div class="form-group">
                 <label class="form-label">Site mặc định</label>

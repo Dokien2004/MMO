@@ -311,7 +311,7 @@ function renderDeptRows($tree, $parentId = 0, $level = 0)
                         <div class="col-md-12">
                             <label class="form-label small fw-bold">Trực thuộc (Phòng ban cha)</label>
                             <select name="parent_id" class="form-select">
-                                <option value="">-- 🏢 Cấp cao nhất (Không có cha) --</option>
+                                <option value="">-- Cấp cao nhất (Không có cha) --</option>
                                 <?php 
                                     $selectedParent = isset($data['parent_id']) ? $data['parent_id'] : null;
                                     renderParentOptions($parentTree, 0, 0, $selectedParent); 
@@ -388,7 +388,7 @@ function renderDeptRows($tree, $parentId = 0, $level = 0)
                         <div class="col-md-12">
                             <label class="form-label small fw-bold">Trực thuộc</label>
                             <select name="parent_id" id="editParentId" class="form-select">
-                                <option value="">-- 🏢 Cấp cao nhất --</option>
+                                <option value="">-- Cấp cao nhất --</option>
                                 <?php 
                                     // Render options, JS sẽ set selected value sau
                                     renderParentOptions($parentTree, 0, 0); 

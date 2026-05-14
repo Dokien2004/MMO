@@ -11,7 +11,7 @@
 <?php if(function_exists('flash')) flash('site_msg'); ?>
 
 <div class="card">
-    <div class="card-title">📋 Quản lý Sites</div>
+    <div class="card-title">Quản lý Sites</div>
     <?php if(empty($sites)): ?>
         <div class="empty-state">
             <i class="fas fa-city fa-3x mb-16" style="opacity: 0.25;"></i><br>

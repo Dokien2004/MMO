@@ -105,6 +105,18 @@ SQL);
 
     public function getActive(): array
     {
+        if (!$this->isAdminSession() && $this->currentUserId() > 0) {
+            $stmt = $this->pdo->prepare(
+                "SELECT s.*
+                 FROM sites s
+                 JOIN user_site_access usa ON usa.site_id = s.id
+                 WHERE s.is_active = 1 AND usa.user_id = :uid
+                 ORDER BY usa.is_default DESC, s.is_master DESC, s.code ASC"
+            );
+            $stmt->execute([':uid' => $this->currentUserId()]);
+            return $stmt->fetchAll();
+        }
+
         $stmt = $this->pdo->query(
             "SELECT * FROM sites WHERE is_active = 1 ORDER BY is_master DESC, code ASC"
         );
@@ -191,6 +203,9 @@ SQL);
         if ($site === null || !(int)$site['is_active']) {
             throw new InvalidArgumentException('Site không tồn tại hoặc đang tắt.');
         }
+        if (!$this->canCurrentUserAccessSite($id)) {
+            throw new InvalidArgumentException('Bạn không có quyền hoạt động ở site này.');
+        }
 
         $_SESSION['site_id'] = (int)$site['id'];
         $_SESSION['user_site_id'] = (int)$site['id'];
@@ -198,6 +213,35 @@ SQL);
         $_SESSION['site_name'] = $site['name'];
 
         return $site;
+    }
+
+    public function canCurrentUserAccessSite(int $siteId): bool
+    {
+        if ($siteId <= 0) {
+            return false;
+        }
+        if ($this->isAdminSession()) {
+            return true;
+        }
+        $userId = $this->currentUserId();
+        if ($userId <= 0) {
+            return $siteId === APP_SITE_ID;
+        }
+        $stmt = $this->pdo->prepare(
+            'SELECT COUNT(*) FROM user_site_access usa JOIN sites s ON s.id = usa.site_id WHERE usa.user_id = :uid AND usa.site_id = :sid AND s.is_active = 1'
+        );
+        $stmt->execute([':uid' => $userId, ':sid' => $siteId]);
+        return (int)$stmt->fetchColumn() > 0;
+    }
+
+    private function currentUserId(): int
+    {
+        return (int)($_SESSION['user_id'] ?? 0);
+    }
+
+    private function isAdminSession(): bool
+    {
+        return (string)($_SESSION['user_role'] ?? '') === 'admin';
     }
 
     private function normalizeSiteData(array $data, int $currentId = 0): array

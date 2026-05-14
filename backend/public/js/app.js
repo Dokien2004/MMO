@@ -113,6 +113,59 @@
         });
     }
 
+    /* ═══════ POST ACTION BUTTONS ═══════ */
+    document.querySelectorAll('[data-post-action]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            var action = button.getAttribute('data-post-action');
+            if (!action) return;
+
+            var originalText = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner"></span> Đang kiểm tra...';
+
+            var formData = new FormData();
+            var csrfToken = getCsrfToken();
+            if (csrfToken) formData.append('csrf_token', csrfToken);
+
+            fetch(action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-Token': csrfToken
+                }
+            })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                showToast(data.message || 'Đã xử lý', data.success ? 'success' : 'error');
+            })
+            .catch(function () {
+                showToast('Có lỗi xảy ra. Vui lòng thử lại.', 'error');
+            })
+            .finally(function () {
+                button.disabled = false;
+                button.innerHTML = originalText;
+            });
+        });
+    });
+
+    /* ═══════ COPY BUTTONS ═══════ */
+    document.querySelectorAll('[data-copy]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            var text = button.getAttribute('data-copy') || '';
+            if (!text) return;
+            if (!navigator.clipboard) {
+                showToast('Trình duyệt không hỗ trợ copy tự động.', 'error');
+                return;
+            }
+            navigator.clipboard.writeText(text).then(function () {
+                showToast('Đã copy vào clipboard.', 'success');
+            }).catch(function () {
+                showToast('Không copy được, hãy copy thủ công.', 'error');
+            });
+        });
+    });
+
     /* ═══════ AUTO-DISMISS ALERTS ═══════ */
     document.querySelectorAll('.alert[data-auto-dismiss]').forEach(function (el) {
         setTimeout(function () {
@@ -120,6 +173,17 @@
             el.style.transform = 'translateY(-8px)';
             setTimeout(function () { el.remove(); }, 300);
         }, 5000);
+    });
+
+    /* ═══════ BULK CHECKBOX TOGGLE ═══════ */
+    document.querySelectorAll('[data-toggle-checks]').forEach(function (toggle) {
+        toggle.addEventListener('change', function () {
+            var selector = toggle.getAttribute('data-toggle-checks');
+            if (!selector) return;
+            document.querySelectorAll(selector).forEach(function (checkbox) {
+                if (!checkbox.disabled) checkbox.checked = toggle.checked;
+            });
+        });
     });
 
     /* ═══════ CONFIRM ACTIONS ═══════ */

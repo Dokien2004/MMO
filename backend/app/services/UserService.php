@@ -20,14 +20,19 @@ class UserService
      */
     public function getAll(): array
     {
-        $stmt = $this->pdo->query(
-            "SELECT u.*, r.name AS role_name, r.code AS role_code,
+        $sql = "SELECT u.*, r.name AS role_name, r.code AS role_code,
                     s.code AS site_code, s.name AS site_name
              FROM users u
              JOIN roles r ON r.id = u.role_id
-             LEFT JOIN sites s ON s.id = u.site_id
-             ORDER BY u.id ASC"
-        );
+             LEFT JOIN sites s ON s.id = u.site_id";
+
+        if (!$this->isAdminSession()) {
+            $stmt = $this->pdo->prepare($sql . " WHERE u.site_id = :site_id ORDER BY u.id ASC");
+            $stmt->execute([':site_id' => currentSiteId()]);
+            return $stmt->fetchAll();
+        }
+
+        $stmt = $this->pdo->query($sql . " ORDER BY u.id ASC");
         return $stmt->fetchAll();
     }
 
@@ -42,9 +47,13 @@ class UserService
              FROM users u
              JOIN roles r ON r.id = u.role_id
              LEFT JOIN sites s ON s.id = u.site_id
-             WHERE u.id = :id"
+             WHERE u.id = :id" . ($this->isAdminSession() ? '' : ' AND u.site_id = :site_id')
         );
-        $stmt->execute([':id' => $id]);
+        $params = [':id' => $id];
+        if (!$this->isAdminSession()) {
+            $params[':site_id'] = currentSiteId();
+        }
+        $stmt->execute($params);
         $user = $stmt->fetch();
         return $user ?: null;
     }
@@ -63,6 +72,8 @@ class UserService
             throw new \InvalidArgumentException('Username hoặc email đã tồn tại.');
         }
 
+        $siteId = $this->sanitizeTargetSiteId((int)($data['site_id'] ?? currentSiteId()));
+
         $stmt = $this->pdo->prepare(
             "INSERT INTO users (username, email, password_hash, full_name, role_id, site_id, is_active)
              VALUES (:username, :email, :pass, :name, :role, :site, :active)"
@@ -73,11 +84,11 @@ class UserService
             ':pass'     => password_hash($data['password'], PASSWORD_BCRYPT),
             ':name'     => $data['full_name'],
             ':role'     => (int)$data['role_id'],
-            ':site'     => max(1, (int)($data['site_id'] ?? APP_SITE_ID)),
+            ':site'     => $siteId,
             ':active'   => 1,
         ]);
         $userId = (int)$this->pdo->lastInsertId();
-        $this->syncDefaultSiteAccess($userId, max(1, (int)($data['site_id'] ?? APP_SITE_ID)));
+        $this->syncDefaultSiteAccess($userId, $siteId);
 
         return $userId;
     }
@@ -96,9 +107,10 @@ class UserService
             throw new \InvalidArgumentException('Username hoặc email đã tồn tại.');
         }
 
-        $siteId = max(1, (int)($data['site_id'] ?? APP_SITE_ID));
+        $siteId = $this->sanitizeTargetSiteId((int)($data['site_id'] ?? currentSiteId()));
+        $scopeWhere = $this->isAdminSession() ? ' WHERE id = :id' : ' WHERE id = :id AND site_id = :current_site_id';
         $sql = "UPDATE users SET username = :username, email = :email,
-                full_name = :name, role_id = :role, site_id = :site WHERE id = :id";
+                full_name = :name, role_id = :role, site_id = :site" . $scopeWhere;
         $params = [
             ':username' => $data['username'],
             ':email'    => $data['email'],
@@ -107,12 +119,15 @@ class UserService
             ':site'     => $siteId,
             ':id'       => $id,
         ];
+        if (!$this->isAdminSession()) {
+            $params[':current_site_id'] = currentSiteId();
+        }
 
         // Update password if provided
         if (!empty($data['password'])) {
             $sql = "UPDATE users SET username = :username, email = :email,
                     full_name = :name, role_id = :role, site_id = :site,
-                    password_hash = :pass WHERE id = :id";
+                    password_hash = :pass" . $scopeWhere;
             $params[':pass'] = password_hash($data['password'], PASSWORD_BCRYPT);
         }
 
@@ -134,8 +149,13 @@ class UserService
             throw new \InvalidArgumentException('Không thể tắt chính tài khoản đang đăng nhập.');
         }
 
-        $stmt = $this->pdo->prepare("UPDATE users SET is_active = :active WHERE id = :id");
-        return $stmt->execute([':active' => $active ? 1 : 0, ':id' => $id]);
+        $sql = "UPDATE users SET is_active = :active WHERE id = :id" . ($this->isAdminSession() ? '' : ' AND site_id = :site_id');
+        $params = [':active' => $active ? 1 : 0, ':id' => $id];
+        if (!$this->isAdminSession()) {
+            $params[':site_id'] = currentSiteId();
+        }
+        $stmt = $this->pdo->prepare($sql);
+        return $stmt->execute($params);
     }
 
     /**
@@ -143,10 +163,13 @@ class UserService
      */
     public function unlockUser(int $id): bool
     {
-        $stmt = $this->pdo->prepare(
-            "UPDATE users SET login_attempts = 0, locked_until = NULL WHERE id = :id"
-        );
-        return $stmt->execute([':id' => $id]);
+        $sql = "UPDATE users SET login_attempts = 0, locked_until = NULL WHERE id = :id" . ($this->isAdminSession() ? '' : ' AND site_id = :site_id');
+        $params = [':id' => $id];
+        if (!$this->isAdminSession()) {
+            $params[':site_id'] = currentSiteId();
+        }
+        $stmt = $this->pdo->prepare($sql);
+        return $stmt->execute($params);
     }
 
     /**
@@ -156,6 +179,23 @@ class UserService
     {
         $stmt = $this->pdo->query("SELECT * FROM roles WHERE is_active = 1 ORDER BY id ASC");
         return $stmt->fetchAll();
+    }
+
+    private function sanitizeTargetSiteId(int $siteId): int
+    {
+        $siteId = max(1, $siteId);
+        if ($this->isAdminSession()) {
+            return $siteId;
+        }
+        if ($siteId !== currentSiteId()) {
+            throw new \InvalidArgumentException('Bạn chỉ được tạo/sửa user trong site hiện tại.');
+        }
+        return $siteId;
+    }
+
+    private function isAdminSession(): bool
+    {
+        return (string)($_SESSION['user_role'] ?? '') === 'admin';
     }
 
     private function syncDefaultSiteAccess(int $userId, int $siteId): void

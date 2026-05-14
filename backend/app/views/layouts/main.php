@@ -28,17 +28,18 @@
         <?php
         // Dynamic sidebar — chỉ hiển thị modules đang bật
         $sidebarModules = [
-            'DASHBOARD' => ['url' => '/',         'page' => 'dashboard', 'label' => 'Dashboard',       'svg' => '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>'],
-            'PRODUCTS'  => ['url' => '/products',  'page' => 'products',  'label' => 'Sản phẩm',        'svg' => '<svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>'],
-            'SCRAPER'   => ['url' => '/scraper',   'page' => 'scraper',   'label' => 'Cào dữ liệu',     'svg' => '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'],
-            'LINKS'     => ['url' => '/links',     'page' => 'links',     'label' => 'Affiliate Links', 'svg' => '<svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>'],
-            'CONTENTS'  => ['url' => '/contents',  'page' => 'contents',  'label' => 'Nội dung',        'svg' => '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>'],
-            'POSTS'     => ['url' => '/posts',     'page' => 'posts',     'label' => 'Đăng bài',        'svg' => '<svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>'],
+            'DASHBOARD' => ['url' => '/',            'page' => 'dashboard', 'label' => 'Tổng quan',           'svg' => '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>'],
+            'SCRAPER'   => ['url' => '/scraper',    'page' => 'scraper',   'label' => 'Product Radar',        'svg' => '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35M11 8v6M8 11h6" stroke-width="2" fill="none" stroke="currentColor"/></svg>'],
+            'PRODUCTS'  => ['url' => '/products',   'page' => 'products',  'label' => 'Sản phẩm',           'svg' => '<svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>'],
+            'LINKS'     => ['url' => '/links',      'page' => 'links',     'label' => 'Link Affiliate',       'svg' => '<svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>'],
+            'CONTENTS'  => ['url' => '/contents',   'page' => 'contents',  'label' => 'Tạo Content',          'svg' => '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>'],
+            'POSTS'     => ['url' => '/posts',      'page' => 'posts',     'label' => 'Đăng bài & Lịch',      'svg' => '<svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>'],
         ];
 
         $systemModules = [
             'SETTINGS' => ['url' => '/settings', 'page' => 'settings', 'label' => 'Tự động hóa', 'svg' => '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.33 1V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1-.6 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1-.33H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0 .6-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .33-1V3a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1 .6 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.36.3.57.72.6 1.19V10a1.65 1.65 0 0 0 1 .33H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51.67z"/></svg>'],
             'LOGS'     => ['url' => '/logs',     'page' => 'logs',     'label' => 'Nhật ký',     'svg' => '<svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>'],
+            'SERVER_INFO' => ['url' => '/server-info', 'page' => 'server_info', 'label' => 'Server Info', 'svg' => '<svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'],
         ];
 
         $currentPage = $currentPage ?? '';
@@ -46,7 +47,7 @@
         ?>
 
         <div class="nav-section">
-            <div class="nav-section-title">Tổng quan</div>
+            <div class="nav-section-title">Khám phá</div>
             <?php foreach ($sidebarModules as $modCode => $m): ?>
                 <?php if (in_array($modCode, $enabledModules)): ?>
                     <a href="<?= url($m['url']) ?>" class="nav-item <?= $currentPage === $m['page'] ? 'active' : '' ?>">
@@ -140,10 +141,9 @@
                         aria-expanded="false"
                         <?= $canSwitchSite ? '' : 'disabled'; ?>
                     >
-                        <i class="fas fa-building me-2"></i>
                         <span><?= e($activeSite['name'] ?? ($activeSite['code'] ?? 'Trụ sở chính')); ?></span>
                         <?php if ($canSwitchSite): ?>
-                            <i class="fas fa-caret-down ms-2"></i>
+                            <span aria-hidden="true">▾</span>
                         <?php endif; ?>
                     </button>
                     <?php if ($canSwitchSite): ?>
@@ -157,7 +157,7 @@
                                 >
                                     <span><?= e((string)$site['name']); ?></span>
                                     <?php if ($isActiveSite): ?>
-                                        <i class="fas fa-check small"></i>
+                                        <span class="small">✓</span>
                                     <?php endif; ?>
                                 </a>
                             <?php endforeach; ?>

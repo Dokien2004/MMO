@@ -20,22 +20,25 @@ final class AffiliateLinkService
         $this->taskLogService = new TaskLogService();
     }
 
-    public function generateForProduct(int $productId, string $campaignCode = 'MVP-LAPTOP'): array
+    public function generateForProduct(int $productId, string $campaignCode = 'MVP-LAPTOP', string $manualAffiliateUrl = ''): array
     {
         $product = $this->productSyncService->findProductById($productId);
         if ($product === null) {
             throw new InvalidArgumentException('Khong tim thay san pham can tao affiliate link.');
         }
 
+        $affiliateUrl = trim($manualAffiliateUrl);
+        if ($affiliateUrl === '') {
+            throw new InvalidArgumentException('Shopee không cho tạo link hoa hồng thật chỉ bằng affiliate_id trong web này. Boss hãy lấy link trong App Shopee: Tôi → Chương trình Tiếp thị liên kết → chọn sản phẩm → Chia sẻ để nhận hoa hồng → copy link shope.ee/... rồi dán vào ô Affiliate link.');
+        }
+        $this->assertValidAffiliateUrl($affiliateUrl, (string)($product['source_platform'] ?? ''));
+
         $links = $this->allLinks();
         $linkId = $this->nextId($links);
-        $trackingCode = $this->buildTrackingCode($product, $campaignCode);
-        $separator = str_contains((string)$product['product_url'], '?') ? '&' : '?';
-        $affiliateUrl = (string)$product['product_url'] . $separator . 'aff=' . rawurlencode($trackingCode);
 
         $linkRecord = [
             'id' => $linkId,
-            'site_id' => (int)($product['site_id'] ?? APP_SITE_ID),
+            'site_id' => (int)($product['site_id'] ?? currentSiteId()),
             'product_id' => (int)$product['id'],
             'source_platform' => (string)$product['source_platform'],
             'original_url' => (string)$product['product_url'],
@@ -50,7 +53,7 @@ final class AffiliateLinkService
         $this->saveLinks($links);
         $this->syncProductLinkState((int)$product['id'], $affiliateUrl);
 
-        $this->taskLogService->create('generate_affiliate_link', 'success', [
+        $this->taskLogService->create('save_affiliate_link', 'success', [
             'product_id' => (int)$product['id'],
             'campaign_code' => $campaignCode,
         ], [
@@ -66,11 +69,11 @@ final class AffiliateLinkService
         $generated = [];
 
         foreach ($products as $product) {
-            if (($product['status'] ?? 'new') !== 'new' || !empty($product['affiliate_url'] ?? '')) {
+            if (($product['status'] ?? 'new') !== 'new' || empty($product['affiliate_url'] ?? '')) {
                 continue;
             }
 
-            $generated[] = $this->generateForProduct((int)$product['id'], $campaignCode);
+            $generated[] = $this->generateForProduct((int)$product['id'], $campaignCode, (string)$product['affiliate_url']);
             if (count($generated) >= $limit) {
                 break;
             }
@@ -87,7 +90,7 @@ final class AffiliateLinkService
         $links = $this->storage->read($this->fileName);
         foreach ($links as &$link) {
             if (!isset($link['site_id'])) {
-                $link['site_id'] = APP_SITE_ID;
+                $link['site_id'] = currentSiteId();
             }
         }
         unset($link);
@@ -100,6 +103,16 @@ final class AffiliateLinkService
     public function recentLinks(int $limit = 10): array
     {
         return array_slice($this->allLinks(), 0, $limit);
+    }
+
+    public function findLinkByProductId(int $productId): ?array
+    {
+        foreach ($this->allLinks() as $link) {
+            if ((int)($link['product_id'] ?? 0) === $productId) {
+                return $link;
+            }
+        }
+        return null;
     }
 
     public function summary(): array
@@ -156,14 +169,33 @@ final class AffiliateLinkService
 
     private function nextId(array $links): int
     {
-        $ids = array_map(static function (array $link): int {
-            return (int)($link['id'] ?? 0);
-        }, $links);
-        return empty($ids) ? 1 : (max($ids) + 1);
+        return $this->storage->nextId($this->fileName);
+    }
+
+    private function assertValidAffiliateUrl(string $affiliateUrl, string $platform): void
+    {
+        if (!filter_var($affiliateUrl, FILTER_VALIDATE_URL)) {
+            throw new InvalidArgumentException('Affiliate link không hợp lệ. Hãy dán link đầy đủ bắt đầu bằng https://');
+        }
+
+        $host = strtolower((string)parse_url($affiliateUrl, PHP_URL_HOST));
+        if ($platform === 'shopee') {
+            $allowed = $host === 'shope.ee' || str_ends_with($host, '.shope.ee') || $host === 's.shopee.vn' || $host === 'shopee.vn' || str_ends_with($host, '.shopee.vn');
+            if (!$allowed) {
+                throw new InvalidArgumentException('Link Shopee Affiliate nên là link rút gọn shope.ee/... lấy từ App Shopee hoặc link tracking chính thức của Shopee.');
+            }
+        }
     }
 
     private function buildTrackingCode(array $product, string $campaignCode): string
     {
-        return strtolower($campaignCode) . '-' . $product['source_platform'] . '-' . $product['source_product_id'];
+        $parts = [
+            strtolower($campaignCode),
+            (string)($product['source_platform'] ?? 'unknown'),
+            (string)($product['source_product_id'] ?? $product['id'] ?? 'unknown'),
+        ];
+        $trackingCode = strtolower(implode('-', $parts));
+        $trackingCode = preg_replace('/[^a-z0-9_-]+/', '-', $trackingCode) ?: 'mmo-tracking';
+        return trim($trackingCode, '-');
     }
 }

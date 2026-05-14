@@ -1,49 +1,60 @@
-<div class="page-header">
-    <div>
-        <h2>Bảng điều khiển</h2>
-        <p>Tổng quan pipeline affiliate MVP</p>
+<div class="hero-card">
+    <div class="hero-row">
+        <div>
+            <div class="page-kicker">Affiliate Pipeline</div>
+            <h2 class="hero-title">Bảng điều khiển MMO</h2>
+            <p class="hero-subtitle">Theo dõi toàn bộ luồng: cào sản phẩm, tạo link affiliate, viết content AI, gắn media và lên lịch đăng bài.</p>
+        </div>
+        <div class="hero-actions">
+            <a class="btn btn-primary" href="<?= url('/scraper') ?>">Cào sản phẩm</a>
+            <a class="btn btn-accent" href="<?= url('/contents') ?>">Xem content</a>
+            <a class="btn btn-purple" href="<?= url('/posts') ?>">Lịch đăng</a>
+        </div>
     </div>
 </div>
 
 <!-- Pipeline Visual -->
 <div class="card mb-24">
-    <div class="card-title">
-        <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-        Luồng xử lý
+    <div class="section-heading">
+        <div class="card-title">
+            <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Luồng xử lý
+        </div>
+        <div class="section-note">Số liệu cập nhật theo DB hiện tại</div>
     </div>
     <div class="pipeline">
         <div class="pipeline-step">
-            <div class="step-icon">📦</div>
+            <div class="step-icon">SP</div>
             <span class="step-count"><?= (int)$productSummary['total'] ?></span>
             <span class="step-label">Sản phẩm</span>
         </div>
         <div class="pipeline-arrow"></div>
         <div class="pipeline-step">
-            <div class="step-icon">🔗</div>
+            <div class="step-icon">LK</div>
             <span class="step-count"><?= (int)$linkSummary['total'] ?></span>
             <span class="step-label">Liên kết</span>
         </div>
         <div class="pipeline-arrow"></div>
         <div class="pipeline-step">
-            <div class="step-icon">📝</div>
+            <div class="step-icon">ND</div>
             <span class="step-count"><?= (int)$contentSummary['draft'] ?></span>
             <span class="step-label">Bản nháp</span>
         </div>
         <div class="pipeline-arrow"></div>
         <div class="pipeline-step">
-            <div class="step-icon">✅</div>
+            <div class="step-icon">OK</div>
             <span class="step-count"><?= (int)$contentSummary['approved'] ?></span>
             <span class="step-label">Đã duyệt</span>
         </div>
         <div class="pipeline-arrow"></div>
         <div class="pipeline-step">
-            <div class="step-icon">📅</div>
+            <div class="step-icon">LT</div>
             <span class="step-count"><?= (int)$postSummary['scheduled'] ?></span>
             <span class="step-label">Lên lịch</span>
         </div>
         <div class="pipeline-arrow"></div>
         <div class="pipeline-step">
-            <div class="step-icon">🚀</div>
+            <div class="step-icon">GO</div>
             <span class="step-count"><?= (int)$postSummary['success'] ?></span>
             <span class="step-label">Đã đăng</span>
         </div>
@@ -101,7 +112,7 @@
 <!-- Quick Actions -->
 <div class="grid-3">
     <div class="card">
-        <div class="card-title">⚡ Tạo liên kết hàng loạt</div>
+        <div class="card-title">Tạo link affiliate thật</div>
         <form data-ajax method="POST" action="<?= url('/links/generate-all') ?>">
             <div class="form-group">
                 <label class="form-label">Mã chiến dịch</label>
@@ -115,7 +126,7 @@
         </form>
     </div>
     <div class="card">
-        <div class="card-title">✨ Sinh nội dung hàng loạt</div>
+        <div class="card-title">Viết content bằng AI</div>
         <form data-ajax method="POST" action="<?= url('/contents/generate-all') ?>">
             <div class="form-group">
                 <label class="form-label">Nguồn sinh</label>
@@ -134,7 +145,7 @@
         </form>
     </div>
     <div class="card">
-        <div class="card-title">📅 Lên lịch đăng bài</div>
+        <div class="card-title">Lên lịch kèm media</div>
         <form data-ajax method="POST" action="<?= url('/posts/schedule-all') ?>">
             <div class="form-group">
                 <label class="form-label">Kênh đăng</label>
@@ -154,7 +165,7 @@
 
 <div class="grid-2">
     <div class="card">
-        <div class="card-title">⚙️ Auto-post hiện tại</div>
+        <div class="card-title">Auto-post hiện tại</div>
         <div class="status-stack">
             <div class="status-line"><span>Campaign mặc định</span><strong><?= e((string)$automationSettings['default_campaign_code']) ?></strong></div>
             <div class="status-line"><span>Provider</span><strong><?= e((string)$automationSettings['default_content_provider']) ?></strong></div>
@@ -166,7 +177,7 @@
     </div>
 
     <div class="card">
-        <div class="card-title">🔥 Sản phẩm có lượt mua cao</div>
+        <div class="card-title">Sản phẩm có lượt mua cao</div>
         <?php if (empty($topSellingProducts)): ?>
             <div class="empty-state"><p>Chưa có sản phẩm nào đạt ngưỡng lượt mua đã cấu hình.</p></div>
         <?php else: ?>

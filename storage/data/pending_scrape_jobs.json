@@ -1,0 +1,164 @@
+[
+    {
+        "id": "scrape_20260510_002049_b07d32",
+        "type": "trending",
+        "payload": {
+            "platform": "shopee",
+            "min_sold_count": 100,
+            "max_pages": 2,
+            "category_ids": []
+        },
+        "status": "failed",
+        "created_at": "2026-05-10T00:20:49+07:00",
+        "updated_at": "2026-05-09T17:26:41+00:00",
+        "started_at": "2026-05-10T00:21:15+07:00",
+        "error": "Stopped for live-browser flow fix"
+    },
+    {
+        "id": "scrape_20260510_002216_d2567a",
+        "type": "trending",
+        "payload": {
+            "platform": "shopee",
+            "min_sold_count": 100,
+            "max_pages": 2,
+            "category_ids": []
+        },
+        "status": "cancelled",
+        "created_at": "2026-05-10T00:22:16+07:00",
+        "updated_at": "2026-05-09T17:34:35+00:00",
+        "error": "Cancelled after smart browser flow update; click scrape again."
+    },
+    {
+        "id": "scrape_20260510_004905_818ca4",
+        "type": "trending",
+        "payload": {
+            "platform": "shopee",
+            "min_sold_count": 100,
+            "max_pages": 1,
+            "category_ids": []
+        },
+        "status": "cancelled",
+        "created_at": "2026-05-10T00:49:05+07:00",
+        "updated_at": "2026-05-09T17:49:29+00:00",
+        "error": "Cancelled assistant test job"
+    },
+    {
+        "id": "scrape_20260510_005101_1fabca",
+        "type": "trending",
+        "payload": {
+            "platform": "shopee",
+            "min_sold_count": 200,
+            "max_pages": 3,
+            "category_ids": [
+                11036132
+            ]
+        },
+        "status": "cancelled",
+        "created_at": "2026-05-10T00:51:01+07:00",
+        "updated_at": "2026-05-09T17:59:16+00:00",
+        "started_at": "2026-05-10T00:51:01+07:00",
+        "trigger": "auto",
+        "finished_at": "2026-05-10T00:52:17+07:00",
+        "result": {
+            "scraped": 0,
+            "filtered": 0,
+            "synced": 0,
+            "errors": [
+                "Điện tử trang 1: Shopee verification blocked the live browser session. Open the live Shopee window and complete captcha\/verification, then run again. Page text: Skip to main content",
+                "Điện tử trang 2: Inspected target navigated or closed",
+                "Điện tử trang 3: Shopee verification blocked the live browser session. Open the live Shopee window and complete captcha\/verification, then run again. Page text: Skip to main content Need help? Page Unavailable Sorry, something went wrong. Please go back and try again, or you can go back to Home Page. Back to Home Page ID: 2491c2e66da-53ad-4e2b-8257-1bfb8af20a1a"
+            ]
+        },
+        "waiting_since": "2026-05-10T00:54:11+07:00",
+        "last_error": "Shopee verification during scrape; waiting for Kiên confirmation.",
+        "error": "Cancelled duplicate older waiting job"
+    },
+    {
+        "id": "scrape_20260510_005454_8253fc",
+        "type": "trending",
+        "payload": {
+            "platform": "shopee",
+            "min_sold_count": 200,
+            "max_pages": 3,
+            "category_ids": [
+                11036132
+            ]
+        },
+        "status": "waiting",
+        "created_at": "2026-05-10T00:54:54+07:00",
+        "updated_at": "2026-05-10T01:05:55+07:00",
+        "started_at": "2026-05-10T01:03:30+07:00",
+        "trigger": "telegram",
+        "waiting_since": "2026-05-10T01:05:55+07:00",
+        "last_error": "Điện tử trang 1: Shopee verification blocked the live browser session. Open the live Shopee window and complete captcha\/verification, then run again. Page text: Skip to main content Need help? Page Unavailable Sorry, something went wrong. Please go back and try again, or you can go back to Home Page. Back to Home Page ID: 70812d0a6da-7f39-4cef-a712-37a4ff14e3e8\nĐiện tử trang 2: Inspected target navigated or closed\nĐiện tử trang 3: Inspected target navigated or closed",
+        "result": {
+            "scraped": 0,
+            "filtered": 0,
+            "synced": 0,
+            "errors": [
+                "Điện tử trang 1: Shopee verification blocked the live browser session. Open the live Shopee window and complete captcha\/verification, then run again. Page text: Skip to main content Need help? Page Unavailable Sorry, something went wrong. Please go back and try again, or you can go back to Home Page. Back to Home Page ID: 70812d0a6da-7f39-4cef-a712-37a4ff14e3e8",
+                "Điện tử trang 2: Inspected target navigated or closed",
+                "Điện tử trang 3: Inspected target navigated or closed"
+            ]
+        }
+    },
+    {
+        "id": "scrape_20260510_082430_d39402",
+        "type": "trending",
+        "payload": {
+            "platform": "shopee",
+            "min_sold_count": 100,
+            "max_pages": 2,
+            "category_ids": [
+                11036132
+            ]
+        },
+        "status": "waiting",
+        "created_at": "2026-05-10T08:24:30+07:00",
+        "updated_at": "2026-05-10T01:39:59+00:00",
+        "started_at": "2026-05-10T08:38:23+07:00",
+        "trigger": "telegram",
+        "waiting_since": "2026-05-10T01:39:59+00:00",
+        "last_error": "Stopped: Chrome is still on Shopee verify\/traffic page.",
+        "result": {
+            "scraped": 0,
+            "filtered": 0,
+            "synced": 0,
+            "errors": [
+                "Điện tử trang 1: Shopee verification blocked the live browser session. Open the live Shopee window and complete captcha\/verification, then run again. Page text: Skip to main content Need help? Page Unavailable Sorry, something went wrong. Please go back and try again, or you can go back to Home Page. Back to Home Page ID: 834194d6fdc-0ea0-4190-b101-59f6b4b823ef",
+                "Điện tử trang 2: Shopee verification blocked the live browser session. Open the live Shopee window and complete captcha\/verification, then run again. Page text: Skip to main content Need help? Page Unavailable Sorry, something went wrong. Please go back and try again, or you can go back to Home Page. Back to Home Page ID: 25291d5a963-f38d-4d4a-aa11-44eb0095acc9"
+            ]
+        }
+    },
+    {
+        "id": "scrape_20260513_213046_f8fc78",
+        "type": "trending",
+        "payload": {
+            "platform": "shopee",
+            "min_sold_count": 200,
+            "max_pages": 2,
+            "category_ids": [
+                11036132,
+                11036670
+            ]
+        },
+        "status": "waiting",
+        "created_at": "2026-05-13T21:30:46+07:00",
+        "updated_at": "2026-05-13T21:32:26+07:00",
+        "started_at": "2026-05-13T21:30:46+07:00",
+        "trigger": "auto",
+        "waiting_since": "2026-05-13T21:32:26+07:00",
+        "last_error": "Điện tử trang 1: Shopee yêu cầu verify\/captcha, đã dừng. Không tự vượt captcha.\nĐiện tử trang 2: Shopee yêu cầu verify\/captcha, đã dừng. Không tự vượt captcha.\nNhà cửa & Đời sống trang 1: Shopee yêu cầu verify\/captcha, đã dừng. Không tự vượt captcha.",
+        "result": {
+            "scraped": 0,
+            "filtered": 0,
+            "synced": 0,
+            "errors": [
+                "Điện tử trang 1: Shopee yêu cầu verify\/captcha, đã dừng. Không tự vượt captcha.",
+                "Điện tử trang 2: Shopee yêu cầu verify\/captcha, đã dừng. Không tự vượt captcha.",
+                "Nhà cửa & Đời sống trang 1: Shopee yêu cầu verify\/captcha, đã dừng. Không tự vượt captcha.",
+                "Nhà cửa & Đời sống trang 2: Shopee yêu cầu verify\/captcha, đã dừng. Không tự vượt captcha."
+            ]
+        }
+    }
+]

@@ -4,9 +4,20 @@ declare(strict_types=1);
 
 final class OpenAIContentProvider
 {
+    private ?string $modelOverride;
+    private ?string $baseUrlOverride;
+    private ?string $apiKeyOverride;
+
+    public function __construct(?string $model = null, ?string $baseUrl = null, ?string $apiKey = null)
+    {
+        $this->modelOverride = $model !== null && trim($model) !== '' ? trim($model) : null;
+        $this->baseUrlOverride = $baseUrl !== null && trim($baseUrl) !== '' ? rtrim(trim($baseUrl), '/') : null;
+        $this->apiKeyOverride = $apiKey;
+    }
+
     public function isAvailable(): bool
     {
-        return openai_api_key() !== '' || openai_base_url() !== 'https://api.openai.com/v1';
+        return $this->apiKey() !== '' || $this->baseUrl() !== 'https://api.openai.com/v1';
     }
 
     public function generate(array $product): array
@@ -16,7 +27,7 @@ final class OpenAIContentProvider
         }
 
         $payload = [
-            'model' => openai_model(),
+            'model' => $this->model(),
             'temperature' => 0.8,
             'response_format' => ['type' => 'json_object'],
             'messages' => [
@@ -31,10 +42,10 @@ final class OpenAIContentProvider
             ],
         ];
 
-        $ch = curl_init(openai_base_url() . '/chat/completions');
+        $ch = curl_init($this->baseUrl() . '/chat/completions');
         $headers = ['Content-Type: application/json'];
-        if (openai_api_key() !== '') {
-            $headers[] = 'Authorization: Bearer ' . openai_api_key();
+        if ($this->apiKey() !== '') {
+            $headers[] = 'Authorization: Bearer ' . $this->apiKey();
         }
 
         curl_setopt_array($ch, [
@@ -42,7 +53,7 @@ final class OpenAIContentProvider
             CURLOPT_POST => true,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
-            CURLOPT_TIMEOUT => OPENAI_TIMEOUT_SECONDS,
+            CURLOPT_TIMEOUT => openai_timeout_seconds(),
         ]);
 
         $response = curl_exec($ch);
@@ -73,7 +84,7 @@ final class OpenAIContentProvider
             throw new RuntimeException('OpenAI-compatible khong tra ve noi dung hop le.');
         }
 
-        $structured = json_decode($content, true);
+        $structured = $this->decodeJsonText($content);
         if (!is_array($structured)) {
             throw new RuntimeException('OpenAI khong tra ve JSON hop le.');
         }
@@ -81,10 +92,33 @@ final class OpenAIContentProvider
         return [
             'title' => trim((string)($structured['title'] ?? '')),
             'body' => trim((string)($structured['body'] ?? '')),
-            'hashtags' => trim((string)($structured['hashtags'] ?? '')),
+            'hashtags' => $this->stringValue($structured['hashtags'] ?? ''),
             'call_to_action' => trim((string)($structured['call_to_action'] ?? '')),
-            'notes' => 'Sinh boi OpenAI API',
+            'notes' => 'Sinh boi OpenAI-compatible API (' . $this->model() . ')',
         ];
+    }
+
+    private function stringValue(mixed $value): string
+    {
+        if (is_array($value)) {
+            return trim(implode(' ', array_map(static fn(mixed $item): string => trim((string)$item), $value)));
+        }
+        return trim((string)$value);
+    }
+
+    private function model(): string
+    {
+        return $this->modelOverride ?? openai_model();
+    }
+
+    private function baseUrl(): string
+    {
+        return $this->baseUrlOverride ?? openai_base_url();
+    }
+
+    private function apiKey(): string
+    {
+        return $this->apiKeyOverride ?? openai_api_key();
     }
 
 
@@ -114,6 +148,30 @@ final class OpenAIContentProvider
             }
         }
         return trim($content);
+    }
+
+    private function decodeJsonText(string $content): ?array
+    {
+        $content = trim($content);
+        $content = preg_replace('/^```(?:json)?\s*/i', '', $content) ?? $content;
+        $content = preg_replace('/\s*```$/', '', $content) ?? $content;
+
+        $decoded = json_decode(trim($content), true);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        $start = strpos($content, '{');
+        $end = strrpos($content, '}');
+        if ($start !== false && $end !== false && $end > $start) {
+            $candidate = substr($content, $start, $end - $start + 1);
+            $decoded = json_decode($candidate, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return null;
     }
 
     private function buildPrompt(array $product): string

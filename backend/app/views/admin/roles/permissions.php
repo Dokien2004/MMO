@@ -479,14 +479,19 @@ body {
 }
 </style>
 
+<form id="syncPermissionConfigForm" action="<?= url('/admin/roles/sync') ?>" method="POST" style="display:none">
+    <input type="hidden" name="csrf_token" value="<?= e((string)($_SESSION['csrf_token'] ?? '')) ?>">
+    <input type="hidden" name="redirect_to" value="<?= e(url('/admin/roles/permissions/' . (int)$role['id'])) ?>">
+</form>
+
 <div class="container-fluid p-0">
-<form id="permissionForm" action="<?= url() ?>/admin/roles/permissions/<?= $role['id']; ?>" method="POST">
-    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? ''; ?>">
+<form id="permissionForm" action="<?= url('/admin/roles/permissions/' . (int)$role['id']) ?>" method="POST">
+    <input type="hidden" name="csrf_token" value="<?= e((string)($_SESSION['csrf_token'] ?? '')) ?>">
 
     <!-- ==================== TOOLBAR ==================== -->
     <div class="perm-toolbar">
         <div class="d-flex align-items-center gap-3">
-            <a href="<?= url() ?>/admin/roles" class="btn btn-light btn-sm border-0 shadow-sm" title="Quay lại danh sách">
+            <a href="<?= url('/admin/roles') ?>" class="btn btn-light btn-sm border-0 shadow-sm" title="Quay lại danh sách">
                 <i class="fas fa-arrow-left"></i>
             </a>
             <div>
@@ -502,13 +507,9 @@ body {
             </div>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <form id="syncPermissionConfigForm" action="<?= url('/admin') ?>/roles/sync" method="POST" class="m-0">
-                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? ''; ?>">
-                <input type="hidden" name="redirect_to" value="<?= url('/admin/roles/permissions/' . (int)$role['id']) ?>">
-                <button type="button" class="btn btn-light btn-sm border fw-bold text-secondary" onclick="confirmPermissionSync()">
-                    <i class="fas fa-sync-alt me-1"></i> Đồng bộ quyền
-                </button>
-            </form>
+            <button type="button" class="btn btn-light btn-sm border fw-bold text-secondary" onclick="confirmPermissionSync()">
+                <i class="fas fa-sync-alt me-1"></i> Đồng bộ quyền
+            </button>
             <?php if (!$isAdmin): ?>
                 <span id="changeIndicator" class="badge bg-warning text-dark me-2" style="display:none; font-size:0.72rem;">
                     <i class="fas fa-pen me-1"></i> <span id="changeCount">0</span> thay đổi
@@ -1015,6 +1016,26 @@ document.addEventListener('DOMContentLoaded', function() {
 // ========================================================
 // GLOBAL FUNCTIONS (accessible from onclick attributes)
 // ========================================================
+function safeConfirmDialog(options, onConfirm) {
+    if (window.Swal && typeof window.Swal.fire === 'function') {
+        window.Swal.fire(options).then(function(result) {
+            if (result.isConfirmed) onConfirm();
+        });
+        return;
+    }
+
+    var message = (options.title || 'Xác nhận') + '\n\n' + (options.text || '');
+    if (window.confirm(message)) {
+        onConfirm();
+    }
+}
+
+function showSavingDialog() {
+    if (window.Swal && typeof window.Swal.fire === 'function') {
+        window.Swal.fire({ title: 'Đang xử lý...', allowOutsideClick: false, didOpen: function() { window.Swal.showLoading(); } });
+    }
+}
+
 function toggleSubgroup(subId) {
     const body = document.getElementById('body-' + subId);
     const toggle = document.getElementById('toggle-' + subId);
@@ -1028,8 +1049,8 @@ function toggleSubgroup(subId) {
     }
 }
 
-    function confirmPermSave() {
-        Swal.fire({
+function confirmPermSave() {
+    safeConfirmDialog({
         title: 'Lưu cấu hình phân quyền?',
         text: 'Quyền hạn sẽ được cập nhật ngay lập tức cho tất cả người dùng thuộc vai trò này.',
         icon: 'question',
@@ -1038,43 +1059,39 @@ function toggleSubgroup(subId) {
         cancelButtonColor: '#6b7280',
         confirmButtonText: '<i class="fas fa-save me-1"></i> Đồng ý lưu',
         cancelButtonText: 'Hủy'
-    }).then(result => {
-        if (result.isConfirmed) {
-            Swal.fire({ title: 'Đang xử lý...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-            document.getElementById('permissionForm').submit();
-        }
-        });
-    }
+    }, function() {
+        showSavingDialog();
+        document.getElementById('permissionForm').submit();
+    });
+}
 
-    function confirmPermissionSync() {
-        Swal.fire({
-            title: 'Đồng bộ danh mục quyền?',
-            text: 'Hệ thống sẽ đọc lại file cấu hình và cập nhật bảng permissions trong database.',
-            icon: 'question',
-            showCancelButton: true,
-            background: 'var(--perm-surface, #111827)',
-            color: 'var(--perm-gray-900)',
-            confirmButtonColor: '#2563eb',
-            cancelButtonColor: '#64748b',
-            confirmButtonText: '<i class="fas fa-sync-alt me-1"></i> Đồng bộ',
-            cancelButtonText: 'Hủy'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                document.getElementById('syncPermissionConfigForm').submit();
-            }
-        });
-    }
+function confirmPermissionSync() {
+    safeConfirmDialog({
+        title: 'Đồng bộ danh mục quyền?',
+        text: 'Hệ thống sẽ đọc lại file cấu hình và cập nhật bảng permissions trong database.',
+        icon: 'question',
+        showCancelButton: true,
+        background: 'var(--perm-surface, #111827)',
+        color: 'var(--perm-gray-900)',
+        confirmButtonColor: '#2563eb',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: '<i class="fas fa-sync-alt me-1"></i> Đồng bộ',
+        cancelButtonText: 'Hủy'
+    }, function() {
+        document.getElementById('syncPermissionConfigForm').submit();
+    });
+}
 
 function resetPermForm() {
-    Swal.fire({
+    safeConfirmDialog({
         title: 'Hủy thay đổi?',
         text: 'Các lựa chọn chưa lưu sẽ bị mất.',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: 'Đồng ý',
         cancelButtonText: 'Không'
-    }).then(result => {
-        if (result.isConfirmed) window.location.reload();
+    }, function() {
+        window.location.reload();
     });
 }
 </script>

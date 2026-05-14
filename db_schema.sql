@@ -53,6 +53,25 @@ CREATE TABLE IF NOT EXISTS affiliate_links (
     CONSTRAINT chk_links_status CHECK (status IN ('active', 'expired', 'error'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS product_market_snapshots (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    site_id INT NOT NULL DEFAULT 1,
+    product_id BIGINT UNSIGNED NOT NULL,
+    source_platform VARCHAR(50) NOT NULL,
+    source_product_id VARCHAR(100) NOT NULL,
+    price DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+    sold_count INT UNSIGNED NOT NULL DEFAULT 0,
+    review_count INT UNSIGNED NOT NULL DEFAULT 0,
+    rating DECIMAL(3,2) NOT NULL DEFAULT 0.00,
+    captured_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_market_snapshots_product_time (site_id, product_id, captured_at),
+    KEY idx_market_snapshots_source_time (site_id, source_platform, source_product_id, captured_at),
+    CONSTRAINT fk_market_snapshots_product
+        FOREIGN KEY (product_id) REFERENCES affiliate_products (id)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS generated_contents (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     site_id INT NOT NULL DEFAULT 1,
@@ -63,6 +82,10 @@ CREATE TABLE IF NOT EXISTS generated_contents (
     hashtags VARCHAR(1000) NOT NULL DEFAULT '',
     call_to_action VARCHAR(500) NOT NULL DEFAULT '',
     ai_provider VARCHAR(50) NOT NULL DEFAULT 'template_engine',
+    media_type VARCHAR(20) NOT NULL DEFAULT 'none',
+    media_url VARCHAR(2000) NOT NULL DEFAULT '',
+    media_prompt TEXT NULL,
+    media_status VARCHAR(30) NOT NULL DEFAULT 'none',
     status VARCHAR(50) NOT NULL DEFAULT 'draft',
     notes TEXT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -144,4 +167,14 @@ CREATE TABLE IF NOT EXISTS automation_settings (
     CONSTRAINT chk_settings_sync_limit CHECK (sync_limit >= 1),
     CONSTRAINT chk_settings_min_sold_count CHECK (min_sold_count >= 0),
     CONSTRAINT chk_settings_publish_interval CHECK (publish_interval_minutes >= 5)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS site_integration_configs (
+    site_id INT UNSIGNED NOT NULL,
+    config_key VARCHAR(100) NOT NULL,
+    config_value TEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (site_id, config_key),
+    KEY idx_site_integration_configs_key (config_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

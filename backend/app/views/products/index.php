@@ -1,115 +1,236 @@
+<?php
+$allProducts = ($products ?? []);
+$totalProducts = count($allProducts);
+$withAffiliate = count(array_filter($allProducts, static fn(array $p): bool => !empty($p['affiliate_url'] ?? '')));
+$withPrice = count(array_filter($allProducts, static fn(array $p): bool => (float)($p['price'] ?? 0) > 0));
+
+$sortedBySold = $allProducts;
+usort($sortedBySold, static fn(array $a, array $b): int => (int)($b['sold_count'] ?? 0) - (int)($a['sold_count'] ?? 0));
+$topProducts = array_slice($sortedBySold, 0, 5);
+
+$radarEligible = array_filter($allProducts, static fn(array $p): bool =>
+    (int)($p['sold_count'] ?? 0) >= 20 && empty($p['affiliate_url'] ?? '')
+);
+usort($radarEligible, static fn(array $a, array $b): int => (int)($b['sold_count'] ?? 0) - (int)($a['sold_count'] ?? 0));
+$topRadarEligible = array_slice($radarEligible, 0, 5);
+?>
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="<?= e(csrf_token()) ?>">
+    <title>Sản phẩm — <?= e(APP_NAME) ?></title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="<?= asset('/css/app.css') ?>">
+    <style>
+    @media (max-width: 640px) {
+        .page-header { flex-direction: column; gap: 12px }
+        .page-header .hero-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap }
+        .page-header .hero-actions .btn { flex: 1; min-width: 140px; text-align: center }
+        .stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px }
+        .grid-12 { grid-template-columns: 1fr !important }
+        .two-col-section { flex-direction: column !important }
+        .publish-mode-grid { flex-direction: column !important }
+        .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch }
+        .table-main th, .table-main td { white-space: nowrap; font-size: 12px; padding: 6px 8px }
+        .products-table tbody tr { display: table-row; }
+        .quick-actions { flex-direction: column !important }
+        .quick-actions .btn { width: 100%; text-align: center; justify-content: center }
+        .radar-card-grid { grid-template-columns: 1fr !important }
+        .top-sold-card { margin-top: 16px }
+    }
+    @media (max-width: 400px) {
+        .stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px }
+        .stat-card .value { font-size: 22px }
+        .metric-pill { font-size: 11px; padding: 2px 7px }
+    }
+    .two-col-section { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap }
+    .two-col-section > * { flex: 1; min-width: 280px }
+    .quick-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0 }
+    .quick-actions .btn { flex: 1; min-width: 120px; text-align: center; justify-content: center; display: flex; align-items: center; gap: 6px; padding: 10px 14px; font-size: 13px }
+    .radar-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 20px }
+    </style>
+</head>
+<body>
+
 <div class="page-header">
     <div>
+        <div class="page-kicker">🛒 Quản lý</div>
         <h2>Sản phẩm</h2>
-        <p>Đồng bộ và quản lý sản phẩm affiliate</p>
+        <p>Xem sản phẩm đã cào, tạo link affiliate và chuyển sang tạo content.</p>
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-purple" href="<?= url('/scraper') ?>">⚡ Radar</a>
+        <a class="btn btn-accent" href="<?= url('/scraper') ?>">+ Cào thêm</a>
     </div>
 </div>
 
-<div class="stats-grid">
-    <div class="stat-card accent"><div class="label">Tổng</div><div class="value"><?= (int)$productSummary['total'] ?></div></div>
-    <div class="stat-card"><div class="label">Mới</div><div class="value"><?= (int)$productSummary['new'] ?></div></div>
-    <div class="stat-card success"><div class="label">Đã link</div><div class="value"><?= (int)$productSummary['linked'] ?></div></div>
-    <div class="stat-card purple"><div class="label">Có nội dung</div><div class="value"><?= (int)$productSummary['content_ready'] ?></div></div>
-    <div class="stat-card success"><div class="label">Đã đăng</div><div class="value"><?= (int)$productSummary['posted'] ?></div></div>
+<!-- KPI cards -->
+<div class="stats-grid" style="margin-bottom:20px">
+    <div class="stat-card accent"><div class="label">Tổng cộng</div><div class="value"><?= number_format($totalProducts) ?></div></div>
+    <div class="stat-card success"><div class="label">Có link aff</div><div class="value"><?= number_format($withAffiliate) ?></div></div>
+    <div class="stat-card"><div class="label">Có giá</div><div class="value"><?= number_format($withPrice) ?></div></div>
+    <div class="stat-card purple"><div class="label">Cần tạo link</div><div class="value"><?= count($topRadarEligible) ?></div></div>
 </div>
 
-<div class="grid-12">
-    <!-- Sync Form -->
-    <div class="card">
-        <div class="card-title">📦 Đồng bộ sản phẩm theo đợt</div>
-        <p class="text-muted text-sm" style="margin-bottom:16px">Dán mảng JSON sản phẩm vào ô bên dưới. Mỗi bản ghi cần có <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">source_product_id</code>, <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">product_name</code>, <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">product_url</code>. Có thể thêm <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;font-size:11px">sold_count</code> để lọc sản phẩm bán chạy.</p>
-        <form data-ajax method="POST" action="<?= url('/sync/manual') ?>">
-            <div class="form-group">
-                <label class="form-label">Nguồn</label>
-                <select class="form-control" name="platform">
-                    <option value="affiliate_api">Affiliate API</option>
+<!-- Quick action buttons -->
+<div class="quick-actions">
+    <a class="btn btn-primary" href="<?= url('/scraper') ?>">🔍 Phân tích Radar</a>
+    <a class="btn btn-accent" href="<?= url('/links') ?>">🔗 Tạo Link</a>
+    <a class="btn btn-success" href="<?= url('/contents') ?>">✍️ Tạo Content</a>
+</div>
+
+<!-- Two-column: Radar eligible + Top sold -->
+<div class="two-col-section">
+    <!-- Radar eligible -->
+    <div class="card radar-card-grid" style="margin-bottom:0">
+        <div class="card-title" style="font-size:14px;margin-bottom:12px">🎯 Cần tạo link — tiềm năng cao</div>
+        <?php if (empty($topRadarEligible)): ?>
+            <p class="text-sm text-muted" style="padding:12px 0">Không có sản phẩm nào cần tạo link ngay. Chạy Product Radar để gom thêm tín hiệu.</p>
+        <?php else: ?>
+            <?php foreach ($topRadarEligible as $p): ?>
+                <div style="padding:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated)">
+                    <div style="font-weight:600;font-size:13px;margin-bottom:4px"><?= e((string)$p['product_name']) ?></div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+                        <span class="badge badge-<?= e((string)$p['source_platform']) ?>" style="font-size:11px"><?= e((string)$p['source_platform']) ?></span>
+                        <span class="metric-pill hot" style="font-size:11px"><?= number_format((int)($p['sold_count'] ?? 0)) ?> đã bán</span>
+                        <?php if ((float)($p['price'] ?? 0) > 0): ?>
+                            <span class="text-sm" style="color:var(--text-sec)"><?= number_format((float)$p['price'], 0, ',', '.') ?> ₫</span>
+                        <?php endif; ?>
+                    </div>
+                    <a href="<?= url('/links?product_id=' . (int)$p['id']) ?>" class="btn btn-sm btn-accent" style="font-size:12px;padding:5px 12px">Tạo link →</a>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
+    </div>
+
+    <!-- Top sold -->
+    <div class="card top-sold-card" style="margin-bottom:0">
+        <div class="card-title" style="font-size:14px;margin-bottom:12px">🏆 Bán chạy nhất</div>
+        <?php if (empty($topProducts)): ?>
+            <p class="text-sm text-muted" style="padding:12px 0">Chưa có dữ liệu.</p>
+        <?php else: ?>
+            <?php $rank = 1; foreach ($topProducts as $p): ?>
+                <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
+                    <span style="width:24px;text-align:center;font-size:13px;color:var(--text-muted);flex-shrink:0"><?= $rank++ ?></span>
+                    <div style="flex:1;min-width:0">
+                        <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><?= e((string)$p['product_name']) ?></div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
+                            <?php if ((float)($p['price'] ?? 0) > 0): ?>
+                                <span class="text-sm" style="color:var(--text-sec)"><?= number_format((float)$p['price'], 0, ',', '.') ?> ₫</span>
+                            <?php endif; ?>
+                            <span class="metric-pill hot" style="font-size:11px"><?= number_format((int)($p['sold_count'] ?? 0)) ?> đã bán</span>
+                        </div>
+                    </div>
+                    <?php if (!empty($p['product_url'])): ?>
+                        <a href="<?= e((string)$p['product_url']) ?>" target="_blank" rel="noreferrer" class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:12px">↗</a>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- Add product / Import forms — mobile-friendly stacked -->
+<div class="publish-mode-grid" style="margin-bottom:20px">
+    <div class="card publish-mode-card ready" style="padding:16px">
+        <div class="section-heading" style="margin-bottom:12px">
+            <div class="card-title" style="font-size:13px">➕ Nhập thủ công</div>
+        </div>
+        <form data-ajax method="POST" action="<?= url('/products/store') ?>">
+            <div class="form-group" style="margin-bottom:10px">
+                <label class="form-label" style="font-size:12px">Tên sản phẩm *</label>
+                <input class="form-control" name="product_name" required placeholder="VD: Áo thun nam trơn" style="font-size:14px;padding:8px 10px">
+            </div>
+            <div class="form-group" style="margin-bottom:10px">
+                <label class="form-label" style="font-size:12px">Link gốc *</label>
+                <input class="form-control" name="product_url" required placeholder="https://shopee.vn/..." style="font-size:14px;padding:8px 10px">
+            </div>
+            <div class="grid-3 compact-grid" style="margin-bottom:10px">
+                <div class="form-group" style="margin-bottom:8px">
+                    <label class="form-label" style="font-size:12px">Giá</label>
+                    <input class="form-control" name="price" type="number" min="0" step="1000" placeholder="99000" style="font-size:14px;padding:8px 10px">
+                </div>
+                <div class="form-group" style="margin-bottom:8px">
+                    <label class="form-label" style="font-size:12px">Lượt bán</label>
+                    <input class="form-control" name="sold_count" type="number" min="0" value="0" style="font-size:14px;padding:8px 10px">
+                </div>
+                <div class="form-group" style="margin-bottom:8px">
+                    <label class="form-label" style="font-size:12px">Nguồn</label>
+                    <select class="form-control" name="source_platform" style="font-size:14px;padding:8px 10px">
+                        <option value="shopee">Shopee</option>
+                        <option value="manual">Nhập tay</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn btn-accent" type="submit" style="width:100%;font-size:14px;padding:10px">Lưu sản phẩm</button>
+        </form>
+    </div>
+
+    <div class="card publish-mode-card" style="padding:16px">
+        <div class="section-heading" style="margin-bottom:12px">
+            <div class="card-title" style="font-size:13px">📥 Import Excel</div>
+        </div>
+        <form data-ajax method="POST" action="<?= url('/products/import') ?>" enctype="multipart/form-data">
+            <div class="form-group" style="margin-bottom:10px">
+                <label class="form-label" style="font-size:12px">File .xlsx / .csv</label>
+                <input class="form-control" type="file" name="product_file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required style="font-size:14px">
+            </div>
+            <div class="form-group" style="margin-bottom:10px">
+                <label class="form-label" style="font-size:12px">Nguồn</label>
+                <select class="form-control" name="platform" style="font-size:14px;padding:8px 10px">
                     <option value="shopee">Shopee</option>
-                    <option value="tiki">Tiki</option>
-                    <option value="tiktokshop">TikTok Shop</option>
-                    <option value="lazada">Lazada</option>
                     <option value="manual">Nhập tay</option>
                 </select>
             </div>
-            <div class="form-group">
-                <label class="form-label">Dữ liệu JSON</label>
-                <textarea class="form-control" name="products_json"><?= e($samplePayload) ?></textarea>
+            <button class="btn btn-success" type="submit" style="width:100%;font-size:14px;padding:10px">Import sản phẩm</button>
+            <div class="sub" style="margin-top:8px">
+                <a href="<?= url('/templates/products-import-template.xlsx') ?>" download style="font-size:12px">📥 Tải file mẫu Excel</a>
             </div>
-            <button type="submit" class="btn btn-primary btn-full">Đồng bộ sản phẩm</button>
-        </form>
-    </div>
-
-    <!-- Batch Actions -->
-    <div class="card">
-        <div class="card-title">⚡ Tạo liên kết hàng loạt</div>
-        <div class="hint-box" style="margin-bottom:16px">Ngưỡng sản phẩm bán chạy hiện tại: <strong><?= (int)($automationSettings['min_sold_count'] ?? 0) ?></strong> lượt mua. Cấu hình tại <a href="<?= url('/settings') ?>">Tự động hóa</a>.</div>
-        <form data-ajax method="POST" action="<?= url('/links/generate-all') ?>">
-            <div class="form-group">
-                <label class="form-label">Mã chiến dịch</label>
-                <input class="form-control" name="campaign_code" value="MVP-LAPTOP">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Số SP xử lý</label>
-                <input class="form-control" name="limit" type="number" min="1" max="20" value="5">
-            </div>
-            <button type="submit" class="btn btn-accent btn-full">Tạo liên kết hàng loạt</button>
-        </form>
-        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0">
-        <div class="card-title">✨ Sinh nội dung hàng loạt</div>
-        <form data-ajax method="POST" action="<?= url('/contents/generate-all') ?>">
-            <div class="form-group">
-                <label class="form-label">Nguồn sinh</label>
-                <select class="form-control" name="provider">
-                    <option value="template_engine">Mẫu có sẵn</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="gemini">Gemini</option>
-                    <option value="auto">Tự động fallback</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Số SP xử lý</label>
-                <input class="form-control" name="limit" type="number" min="1" max="20" value="5">
-            </div>
-            <button type="submit" class="btn btn-purple btn-full">Sinh bản nháp</button>
         </form>
     </div>
 </div>
 
-<!-- Products Table -->
+<!-- Full products list -->
 <div class="card">
-    <div class="card-title">📋 Danh sách sản phẩm</div>
-    <?php if (empty($products)): ?>
-        <div class="empty-state"><p>Chưa có sản phẩm nào được đồng bộ.</p></div>
+    <div class="section-heading" style="margin-bottom:12px">
+        <div>
+            <div class="card-title">Toàn bộ sản phẩm (<?= number_format($totalProducts) ?>)</div>
+        </div>
+    </div>
+
+    <?php if (empty($allProducts)): ?>
+        <div class="empty-state">
+            <p>Chưa có sản phẩm nào. Hãy vào <strong>Product Radar</strong> để cào sản phẩm.</p>
+            <a class="btn btn-accent" href="<?= url('/scraper') ?>">Đi tới Radar</a>
+        </div>
     <?php else: ?>
         <div class="table-wrap">
-            <table>
-                <thead><tr><th>Mã</th><th>Sản phẩm</th><th>Giá</th><th>Lượt mua</th><th>Trạng thái</th><th>Nội dung</th><th>Thao tác</th></tr></thead>
-                <tbody>
-                <?php foreach ($products as $product): ?>
+            <table class="table-main table-compact products-table">
+                <thead>
                     <tr>
-                        <td>#<?= (int)$product['id'] ?></td>
+                        <th>Sản phẩm</th>
+                        <th style="width:70px">Nguồn</th>
+                        <th style="width:90px">Giá</th>
+                        <th style="width:80px">Đã bán</th>
+                        <th style="width:90px">Trạng thái</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($allProducts as $product): ?>
+                    <tr>
                         <td>
-                            <strong><?= e((string)$product['product_name']) ?></strong>
-                            <div class="sub"><?= e((string)$product['source_platform']) ?> · <?= e((string)$product['source_product_id']) ?></div>
-                            <a href="<?= e((string)$product['product_url']) ?>" target="_blank" rel="noreferrer" class="text-xs">Mở link gốc ↗</a>
+                            <strong class="item-title" style="font-size:13px"><?= e((string)$product['product_name']) ?></strong>
+                            <div class="item-meta sub" style="font-size:11px">#<?= (int)$product['id'] ?></div>
+                            <?php if (!empty($product['product_url'])): ?>
+                                <a href="<?= e((string)$product['product_url']) ?>" target="_blank" rel="noreferrer" class="text-xs" style="color:var(--accent);display:inline-block;margin-top:2px">Mở ↗</a>
+                            <?php endif; ?>
                         </td>
-                        <td class="text-sm"><?= number_format((float)($product['price'] ?? 0), 0, ',', '.') ?> ₫</td>
-                        <td><span class="metric-pill"><?= number_format((int)($product['sold_count'] ?? 0)) ?></span></td>
+                        <td><span class="badge badge-<?= e((string)$product['source_platform']) ?>" style="font-size:11px"><?= e((string)$product['source_platform']) ?></span></td>
+                        <td class="text-sm"><?= (float)($product['price'] ?? 0) > 0 ? number_format((float)$product['price'], 0, ',', '.') . ' ₫' : '—' ?></td>
+                        <td><span class="metric-pill <?= (int)($product['sold_count'] ?? 0) >= 1000 ? 'hot' : '' ?>" style="font-size:11px"><?= number_format((int)($product['sold_count'] ?? 0)) ?></span></td>
                         <td><?= status_badge((string)$product['status']) ?></td>
-                        <td><?= status_badge((string)($product['content_status'] ?? 'none')) ?></td>
-                        <td>
-                            <div class="btn-group">
-                                <form data-ajax method="POST" action="<?= url('/links/generate') ?>">
-                                    <input type="hidden" name="product_id" value="<?= (int)$product['id'] ?>">
-                                    <input type="hidden" name="campaign_code" value="MVP-LAPTOP">
-                                    <button type="submit" class="btn btn-accent btn-sm">Tạo link</button>
-                                </form>
-                                <form data-ajax method="POST" action="<?= url('/contents/generate') ?>">
-                                    <input type="hidden" name="product_id" value="<?= (int)$product['id'] ?>">
-                                    <input type="hidden" name="provider" value="template_engine">
-                                    <button type="submit" class="btn btn-purple btn-sm">Sinh nháp</button>
-                                </form>
-                            </div>
-                        </td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>
@@ -117,3 +238,6 @@
         </div>
     <?php endif; ?>
 </div>
+
+</body>
+</html>

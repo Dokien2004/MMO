@@ -20,7 +20,7 @@ final class DatabaseStorage
         ],
         'generated_contents.json' => [
             'table' => 'generated_contents',
-            'columns' => ['id', 'site_id', 'product_id', 'affiliate_link_id', 'title', 'body', 'hashtags', 'call_to_action', 'ai_provider', 'status', 'notes', 'created_at', 'updated_at'],
+            'columns' => ['id', 'site_id', 'product_id', 'affiliate_link_id', 'title', 'body', 'hashtags', 'call_to_action', 'ai_provider', 'media_type', 'media_url', 'media_prompt', 'media_status', 'status', 'notes', 'created_at', 'updated_at'],
             'json' => [],
         ],
         'scheduled_posts.json' => [
@@ -46,7 +46,8 @@ final class DatabaseStorage
         $map = $this->map($fileName);
         $table = $map['table'];
         $orderColumn = $fileName === 'task_logs.json' ? 'id' : 'updated_at';
-        $stmt = $this->pdo->query("SELECT * FROM {$table} ORDER BY {$orderColumn} DESC");
+        $stmt = $this->pdo->prepare("SELECT * FROM {$table} WHERE site_id = :site_id ORDER BY {$orderColumn} DESC");
+        $stmt->execute([':site_id' => $this->currentSiteId()]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
         foreach ($rows as &$row) {
@@ -86,13 +87,15 @@ final class DatabaseStorage
 
         $this->pdo->beginTransaction();
         try {
-            $this->pdo->exec('DELETE FROM ' . $table);
+            $delete = $this->pdo->prepare('DELETE FROM ' . $table . ' WHERE site_id = :site_id');
+            $delete->execute([':site_id' => $this->currentSiteId()]);
             $stmt = $this->pdo->prepare($sql);
             foreach ($payload as $row) {
                 if (!is_array($row)) {
                     continue;
                 }
                 $params = [];
+                $row['site_id'] = $this->currentSiteId();
                 foreach ($columns as $column) {
                     $value = $row[$column] ?? $this->defaultValue($column);
                     if (in_array($column, $map['json'], true)) {
@@ -115,6 +118,18 @@ final class DatabaseStorage
         }
     }
 
+    public function nextId(string $fileName): int
+    {
+        $map = $this->map($fileName);
+        $stmt = $this->pdo->query('SELECT COALESCE(MAX(id), 0) + 1 FROM ' . $map['table']);
+        return max(1, (int)$stmt->fetchColumn());
+    }
+
+    private function currentSiteId(): int
+    {
+        return function_exists('currentSiteId') ? currentSiteId() : APP_SITE_ID;
+    }
+
     private function map(string $fileName): array
     {
         if (!isset($this->maps[$fileName])) {
@@ -126,11 +141,13 @@ final class DatabaseStorage
     private function defaultValue(string $column): mixed
     {
         return match ($column) {
-            'site_id' => APP_SITE_ID,
+            'site_id' => $this->currentSiteId(),
             'price' => 0,
             'sold_count' => 0,
             'payload', 'result_payload' => [],
             'affiliate_link_id', 'scheduled_at', 'posted_at' => null,
+            'media_type' => 'none',
+            'media_status' => 'none',
             'created_at', 'updated_at' => date('Y-m-d H:i:s'),
             default => '',
         };
@@ -221,6 +238,10 @@ CREATE TABLE IF NOT EXISTS generated_contents (
     hashtags VARCHAR(1000) NOT NULL DEFAULT '',
     call_to_action VARCHAR(500) NOT NULL DEFAULT '',
     ai_provider VARCHAR(50) NOT NULL DEFAULT 'template_engine',
+    media_type VARCHAR(20) NOT NULL DEFAULT 'none',
+    media_url VARCHAR(2000) NOT NULL DEFAULT '',
+    media_prompt TEXT NULL,
+    media_status VARCHAR(30) NOT NULL DEFAULT 'none',
     status VARCHAR(50) NOT NULL DEFAULT 'draft',
     notes TEXT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -288,6 +309,10 @@ CREATE TABLE IF NOT EXISTS affiliate_task_logs (
 SQL);
 
         $this->ensureColumn('affiliate_products', 'sold_count', 'INT UNSIGNED NOT NULL DEFAULT 0 AFTER price');
+        $this->ensureColumn('generated_contents', 'media_type', "VARCHAR(20) NOT NULL DEFAULT 'none' AFTER ai_provider");
+        $this->ensureColumn('generated_contents', 'media_url', "VARCHAR(2000) NOT NULL DEFAULT '' AFTER media_type");
+        $this->ensureColumn('generated_contents', 'media_prompt', 'TEXT NULL AFTER media_url');
+        $this->ensureColumn('generated_contents', 'media_status', "VARCHAR(30) NOT NULL DEFAULT 'none' AFTER media_prompt");
     }
 
     private function ensureColumn(string $table, string $column, string $definition): void

@@ -44,10 +44,14 @@ if (empty($_SESSION['csrf_token'])) {
 $publicRoutes = ['/login', '/health'];
 $isPublicRoute = in_array($path, $publicRoutes, true);
 
-// ── Login page (GET) ──
-if ($path === '/login' && $method === 'GET') {
+// ── Login page (GET/HEAD) ──
+if ($path === '/login' && in_array($method, ['GET', 'HEAD'], true)) {
     if (isLoggedIn()) {
         redirect_to('/');
+    }
+    if ($method === 'HEAD') {
+        http_response_code(200);
+        exit;
     }
     // Render standalone login page (no layout)
     $error = null;
@@ -117,10 +121,54 @@ $taskLogService = new TaskLogService();
 $siteService = new SiteService();
 $linkService = new AffiliateLinkService();
 $contentService = new ContentService();
+$imageMediaService = new ImageMediaService();
+$videoMediaService = new VideoMediaService();
 $postingService = new PostingService();
 $automationSettingsService = new AutomationSettingsService();
 $integrationConfigService = new IntegrationConfigService();
 $scraperService = new ScraperService();
+$pendingScrapeJobService = new PendingScrapeJobService();
+
+function queueScrapeIntervention(
+    PendingScrapeJobService $pendingScrapeJobService,
+    ScraperService $scraperService,
+    string $type,
+    array $payload,
+    string $reason
+): array {
+    $job = $pendingScrapeJobService->create($type, $payload);
+    $telegram = new TelegramService();
+    if ($telegram->isConfigured()) {
+        $cdpUrl = $scraperService->ensureShopeeLiveBrowser();
+        file_put_contents(
+            STORAGE_PATH . '/data/telegram_scraper_state.json',
+            json_encode(['offset' => $telegram->latestUpdateOffset()], JSON_PRETTY_PRINT),
+            LOCK_EX
+        );
+        $srvInfo = (new ServerInfoService())->get();
+        $telegram->sendScrapeInterventionRequest(
+            $job['id'],
+            $srvInfo['rustdesk_id'] ?? '—',
+            defined('RUSTDESK_PASSWORD') ? RUSTDESK_PASSWORD : '',
+            $reason . ($cdpUrl ? ' Chrome chuyên dụng: ' . $cdpUrl : '')
+        );
+        @exec(PHP_BINARY . ' ' . escapeshellarg(BASE_PATH . '/scripts/scraper_telegram_worker.php') . ' > ' . escapeshellarg(STORAGE_PATH . '/logs/scraper_telegram_worker.out.log') . ' 2>&1 &');
+    }
+
+    return $job;
+}
+
+function queueScrapeAuto(PendingScrapeJobService $pendingScrapeJobService, string $type, array $payload): array
+{
+    $job = $pendingScrapeJobService->create($type, $payload, 'queued');
+    @exec(PHP_BINARY . ' ' . escapeshellarg(BASE_PATH . '/scripts/scraper_telegram_worker.php') . ' > ' . escapeshellarg(STORAGE_PATH . '/logs/scraper_telegram_worker.out.log') . ' 2>&1 &');
+    return $job;
+}
+
+function isShopeeInterventionError(string $message): bool
+{
+    return preg_match('/captcha|verification|verify\/traffic|verify\/captcha|Shopee verification|Page Unavailable|Please go back|đăng nhập lại|login/i', $message) === 1;
+}
 
 // ══════════════════════════════════════════
 //  MODULE CHECK: Route → required module
@@ -130,6 +178,7 @@ $routeModuleMap = [
     '/links'    => 'LINKS',    '/contents' => 'CONTENTS',
     '/posts'    => 'POSTS',    '/settings' => 'SETTINGS',
     '/logs'     => 'LOGS',
+    '/server-info' => 'SERVER_INFO',
     '/admin/modules' => 'ADMIN', '/admin/permissions' => 'ADMIN',
     '/admin/users'   => 'ADMIN',
     '/admin/sites'   => 'ADMIN',
@@ -159,8 +208,72 @@ if ($method === 'GET' && isset($getPermissionMap[$path])) {
 // ══════════════════════════════════════════
 
 if ($path === '/api/products') {
+    requirePermission('products.view');
     header('Content-Type: application/json');
     echo json_encode(['success' => true, 'data' => $productSyncService->allProducts()], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+if ($path === '/api/shopee-product') {
+    requirePermission('products.view');
+    header('Content-Type: application/json; charset=utf-8');
+    $link = trim((string)($_GET['link'] ?? ''));
+    if ($link === '' || !preg_match('#^https://([^/]+\.)?shopee\.vn/#i', $link)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Thiếu hoặc sai link Shopee.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    try {
+        $cdpUrl = $scraperService->ensureShopeeLiveBrowser();
+        $payload = json_encode([
+            'link' => $link,
+            'cdpUrl' => $cdpUrl,
+            'userDataDir' => STORAGE_PATH . '/browser/shopee-product-profile',
+        ], JSON_UNESCAPED_UNICODE);
+        $script = BASE_PATH . '/scripts/shopee_product_detail.js';
+        $cmd = [PHP_OS_FAMILY === 'Windows' ? 'node.exe' : 'node', $script, (string)$payload];
+        $descriptorSpec = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+        $process = proc_open($cmd, $descriptorSpec, $pipes, BASE_PATH, null, ['bypass_shell' => true]);
+        if (!is_resource($process)) {
+            throw new RuntimeException('Không chạy được Shopee product scraper.');
+        }
+        fclose($pipes[0]);
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+        $stdout = '';
+        $stderr = '';
+        $deadline = time() + 130;
+        while (time() < $deadline) {
+            $stdout .= stream_get_contents($pipes[1]);
+            $stderr .= stream_get_contents($pipes[2]);
+            $status = proc_get_status($process);
+            if (!$status['running']) break;
+            usleep(200000);
+        }
+        $status = proc_get_status($process);
+        if ($status['running']) {
+            proc_terminate($process);
+            throw new RuntimeException('Shopee product scraper timeout.');
+        }
+        $stdout .= stream_get_contents($pipes[1]);
+        $stderr .= stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $exitCode = proc_close($process);
+        if ($exitCode !== 0) {
+            throw new RuntimeException(trim($stderr) !== '' ? trim($stderr) : 'Shopee product scraper failed.');
+        }
+        $data = json_decode(trim($stdout), true, 512, JSON_THROW_ON_ERROR);
+        echo json_encode(['success' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $throwable) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => $throwable->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
     exit;
 }
 
@@ -200,18 +313,21 @@ if ($path === '/api/products/import' && $method === 'POST') {
 }
 
 if ($path === '/api/links') {
+    requirePermission('links.view');
     header('Content-Type: application/json');
     echo json_encode(['success' => true, 'data' => $linkService->allLinks()], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 if ($path === '/api/contents') {
+    requirePermission('contents.view');
     header('Content-Type: application/json');
     echo json_encode(['success' => true, 'data' => $contentService->allContents()], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 if ($path === '/api/posts') {
+    requirePermission('posts.view');
     header('Content-Type: application/json');
     echo json_encode(['success' => true, 'data' => $postingService->allPosts()], JSON_UNESCAPED_UNICODE);
     exit;
@@ -227,21 +343,32 @@ $postPermissionMap = [
     '/scraper/run'           => 'scraper.run',
     '/scraper/run-all'       => 'scraper.run',
     '/scraper/trending'      => 'scraper.run',
+    '/scraper/radar'         => 'scraper.run',
     '/scraper/save-config'   => 'scraper.config',
     '/scraper/delete-config' => 'scraper.config',
     '/sync/manual'           => 'products.sync',
+    '/products/store'        => 'products.sync',
+    '/products/import'       => 'products.sync',
     '/links/generate'        => 'links.generate',
     '/links/generate-all'    => 'links.generate',
     '/contents/generate'     => 'contents.generate',
     '/contents/generate-all' => 'contents.generate',
+    '/contents/generate-image' => 'contents.generate',
+    '/contents/generate-images' => 'contents.generate',
+    '/contents/generate-video' => 'contents.generate',
+    '/contents/generate-videos' => 'contents.generate',
     '/contents/approve'      => 'contents.approve',
     '/contents/reject'       => 'contents.approve',
     '/posts/schedule'        => 'posts.schedule',
     '/posts/schedule-all'    => 'posts.schedule',
+    '/posts/schedule-selected' => 'posts.schedule',
+    '/posts/publish'         => 'posts.manage',
+    '/posts/publish-due'     => 'posts.manage',
     '/posts/mark-success'    => 'posts.manage',
     '/posts/mark-failed'     => 'posts.manage',
     '/settings/automation'   => 'settings.edit',
     '/settings/integrations' => 'settings.edit',
+    '/settings/check-facebook-token' => 'settings.view',
     '/admin/modules/toggle'  => 'admin.modules',
     '/admin/permissions/save' => 'admin.permissions',
     '/admin/roles/sync'       => 'admin.permissions',
@@ -276,18 +403,37 @@ if ($method === 'POST') {
                 json_response(true, 'Đã đồng bộ ' . $result['summary']['received_count'] . ' sản phẩm. Thêm mới: ' . $result['summary']['inserted_count'] . ', cập nhật: ' . $result['summary']['updated_count'] . '.');
                 break;
 
+            case '/products/store':
+                $product = $productSyncService->createManualProduct($_POST);
+                json_response(true, 'Đã lưu sản phẩm thủ công #' . (int)($product['id'] ?? 0) . '.', ['data' => $product]);
+                break;
+
+            case '/products/import':
+                if (empty($_FILES['product_file']) || !is_array($_FILES['product_file'])) {
+                    throw new InvalidArgumentException('Chưa chọn file CSV/XLSX để import.');
+                }
+                $file = $_FILES['product_file'];
+                if ((int)($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                    throw new InvalidArgumentException('Upload file lỗi, mã lỗi: ' . (int)($file['error'] ?? -1));
+                }
+                $platform = trim((string)($_POST['platform'] ?? 'manual'));
+                $result = $productSyncService->importProductsFromFile((string)$file['tmp_name'], (string)$file['name'], $platform);
+                json_response(true, 'Đã import ' . $result['summary']['received_count'] . ' sản phẩm. Thêm mới: ' . $result['summary']['inserted_count'] . ', cập nhật: ' . $result['summary']['updated_count'] . '.', ['data' => $result['summary']]);
+                break;
+
             case '/links/generate':
                 $productId = (int)($_POST['product_id'] ?? 0);
                 $campaignCode = trim((string)($_POST['campaign_code'] ?? 'MVP-LAPTOP'));
-                $linkService->generateForProduct($productId, $campaignCode !== '' ? $campaignCode : 'MVP-LAPTOP');
-                json_response(true, 'Đã tạo affiliate link cho sản phẩm #' . $productId . '.');
+                $affiliateUrl = trim((string)($_POST['affiliate_url'] ?? ''));
+                $linkService->generateForProduct($productId, $campaignCode !== '' ? $campaignCode : 'MVP-LAPTOP', $affiliateUrl);
+                json_response(true, 'Đã lưu affiliate link thật cho sản phẩm #' . $productId . '.');
                 break;
 
             case '/links/generate-all':
                 $campaignCode = trim((string)($_POST['campaign_code'] ?? 'MVP-LAPTOP'));
                 $limit = max(1, min(20, (int)($_POST['limit'] ?? 5)));
                 $result = $linkService->generateForEligibleProducts($campaignCode !== '' ? $campaignCode : 'MVP-LAPTOP', $limit);
-                json_response(true, 'Đã tạo ' . $result['count'] . ' affiliate link tự động.');
+                json_response(true, 'Đã đồng bộ ' . $result['count'] . ' affiliate link đã dán sẵn. Link Shopee thật phải lấy từ App Shopee rồi dán vào từng sản phẩm.');
                 break;
 
             case '/contents/generate':
@@ -302,6 +448,54 @@ if ($method === 'POST') {
                 $limit = max(1, min(20, (int)($_POST['limit'] ?? 5)));
                 $result = $contentService->generateForEligibleProducts($limit, $provider !== '' ? $provider : 'template_engine');
                 json_response(true, 'Đã sinh ' . $result['count'] . ' draft content.');
+                break;
+
+            case '/contents/generate-image':
+                $contentId = (int)($_POST['content_id'] ?? 0);
+                $updated = $imageMediaService->generateForContent($contentId);
+                json_response(true, 'Đã tạo ảnh AI cho content #' . $contentId . '.', ['data' => ['media_url' => $updated['media_url'] ?? '']]);
+                break;
+
+            case '/contents/generate-video':
+                $contentId = (int)($_POST['content_id'] ?? 0);
+                $updated = $videoMediaService->generateForContent($contentId);
+                json_response(true, 'Đã tạo video sản phẩm cho content #' . $contentId . '.', ['data' => ['media_url' => $updated['media_url'] ?? '']]);
+                break;
+
+            case '/contents/generate-videos':
+                $limit = max(1, min(20, (int)($_POST['limit'] ?? 5)));
+                $result = $videoMediaService->generateForPendingContents($limit);
+                $message = 'Đã tạo ' . (int)$result['count'] . ' video sản phẩm.';
+                if (!empty($result['errors'])) {
+                    $message .= ' Có ' . count($result['errors']) . ' lỗi.';
+                }
+                json_response((int)$result['count'] > 0, $message, ['data' => $result]);
+                break;
+
+            case '/contents/generate-images':
+                $limit = max(1, min(20, (int)($_POST['limit'] ?? 5)));
+                $lockFile = STORAGE_PATH . '/logs/generate_pending_images.lock';
+                if (is_file($lockFile)) {
+                    $lockInfo = json_decode((string)file_get_contents($lockFile), true);
+                    $pid = (int)($lockInfo['pid'] ?? 0);
+                    if ($pid > 0 && function_exists('posix_kill') && @posix_kill($pid, 0)) {
+                        json_response(true, 'Đang có job tạo ảnh chạy nền. Vui lòng chờ xong rồi refresh trang.', ['data' => $lockInfo]);
+                        break;
+                    }
+                    @unlink($lockFile);
+                }
+
+                $script = BASE_PATH . '/scripts/generate_pending_images.php';
+                $logFile = STORAGE_PATH . '/logs/generate_pending_images.out.log';
+                $command = 'nohup ' . escapeshellcmd(PHP_BINARY) . ' ' . escapeshellarg($script) . ' ' . (int)$limit . ' >> ' . escapeshellarg($logFile) . ' 2>&1 & echo $!';
+                $pid = trim((string)shell_exec($command));
+
+                $taskLogService->create('generate_pending_images_dispatch', 'started', [
+                    'limit' => $limit,
+                    'pid' => $pid,
+                ]);
+
+                json_response(true, 'Đã đưa ' . $limit . ' ảnh vào hàng đợi tạo nền. Khi xong hệ thống sẽ gửi Telegram thông báo.', ['data' => ['pid' => $pid, 'limit' => $limit]]);
                 break;
 
             case '/contents/approve':
@@ -327,8 +521,42 @@ if ($method === 'POST') {
             case '/posts/schedule-all':
                 $channel = trim((string)($_POST['channel'] ?? 'fanpage_manual'));
                 $limit = max(1, min(20, (int)($_POST['limit'] ?? 5)));
-                $result = $postingService->scheduleForApprovedContents($limit, $channel !== '' ? $channel : 'fanpage_manual');
-                json_response(true, 'Đã tạo lịch đăng cho ' . $result['count'] . ' bài.');
+                $scheduledAt = trim((string)($_POST['scheduled_at'] ?? ''));
+                $intervalMinutes = max(1, min(1440, (int)($_POST['interval_minutes'] ?? 15)));
+                $result = $postingService->scheduleForApprovedContents($limit, $channel !== '' ? $channel : 'fanpage_manual', $scheduledAt, $intervalMinutes);
+                $message = 'Đã tạo lịch đăng cho ' . $result['count'] . ' bài.';
+                if (!empty($result['errors'])) {
+                    $message .= ' Có ' . count($result['errors']) . ' lỗi.';
+                }
+                json_response((int)$result['count'] > 0, $message, ['data' => $result]);
+                break;
+
+            case '/posts/schedule-selected':
+                $channel = trim((string)($_POST['channel'] ?? 'fanpage_manual'));
+                $scheduledAt = trim((string)($_POST['scheduled_at'] ?? ''));
+                $intervalMinutes = max(1, min(1440, (int)($_POST['interval_minutes'] ?? 15)));
+                $contentIds = $_POST['content_ids'] ?? [];
+                if (!is_array($contentIds)) {
+                    $contentIds = [$contentIds];
+                }
+                $result = $postingService->scheduleSelectedContents($contentIds, $channel !== '' ? $channel : 'fanpage_manual', $scheduledAt, $intervalMinutes);
+                $message = 'Đã lên lịch ' . (int)$result['count'] . ' bài đã chọn.';
+                if (!empty($result['errors'])) {
+                    $message .= ' Có ' . count($result['errors']) . ' lỗi.';
+                }
+                json_response((int)$result['count'] > 0, $message, ['data' => $result]);
+                break;
+
+            case '/posts/publish':
+                $postId = (int)($_POST['post_id'] ?? 0);
+                $posted = $postingService->publishPost($postId);
+                json_response(true, 'Đã đăng bài #' . $postId . ' lên Facebook.', ['data' => $posted]);
+                break;
+
+            case '/posts/publish-due':
+                $limit = max(1, min(20, (int)($_POST['limit'] ?? 5)));
+                $result = $postingService->publishDueScheduledPosts($limit);
+                json_response(true, 'Đã đăng tự động ' . (int)$result['count'] . ' bài đến hạn.', ['data' => $result]);
                 break;
 
             case '/posts/mark-success':
@@ -355,6 +583,11 @@ if ($method === 'POST') {
                 json_response(true, 'Đã lưu cấu hình API/tài khoản. Nếu vừa đổi key, reload trang để cập nhật trạng thái.', ['data' => array_keys($integrations)]);
                 break;
 
+            case '/settings/check-facebook-token':
+                $facebookCheck = (new FacebookPagePublisher())->checkToken();
+                json_response((bool)$facebookCheck['ok'], (string)$facebookCheck['message'], ['data' => $facebookCheck]);
+                break;
+
             // ── Scraper actions ──
             case '/scraper/save-config':
                 $configId = $scraperService->saveConfig($_POST);
@@ -369,10 +602,22 @@ if ($method === 'POST') {
 
             case '/scraper/run':
                 $configId = (int)($_POST['config_id'] ?? 0);
-                $result = $scraperService->runScrapeJob($configId);
-                $msg = "Đã cào {$result['scraped']} SP, lọc {$result['filtered']} SP bán chạy, đồng bộ {$result['synced']} SP.";
-                if (!empty($result['errors'])) $msg .= ' (' . count($result['errors']) . ' lỗi)';
-                json_response(true, $msg);
+
+                $scraperService->ensureShopeeLiveBrowser();
+                $sessionCheck = $scraperService->checkShopeeSession();
+                if (!empty($sessionCheck['captcha_required'])) {
+                    $job = queueScrapeIntervention(
+                        $pendingScrapeJobService,
+                        $scraperService,
+                        'config',
+                        ['config_id' => $configId],
+                        'Chrome Shopee chuyên dụng đang cần đăng nhập/vượt captcha. Vào server xử lý rồi nhắn bot "xong".'
+                    );
+                    json_response(true, 'Chrome cần can thiệp. Đã tạo job chờ #' . $job['id'] . ' và gửi Telegram.');
+                }
+
+                $job = queueScrapeAuto($pendingScrapeJobService, 'config', ['config_id' => $configId]);
+                json_response(true, 'Chrome ổn. Đã đưa job #' . $job['id'] . ' vào hàng đợi chạy nền, web không cần chờ.');
                 break;
 
             case '/scraper/run-all':
@@ -387,10 +632,57 @@ if ($method === 'POST') {
                 $minSold = max(0, (int)($_POST['min_sold_count'] ?? 100));
                 $maxPages = max(1, min(3, (int)($_POST['max_pages'] ?? 2)));
                 $categoryIds = array_map('intval', (array)($_POST['category_ids'] ?? []));
-                $result = $scraperService->scrapeTrending($platform, $categoryIds, $minSold, $maxPages);
-                $msg = "Đã cào {$result['scraped']} SP trending, lọc {$result['filtered']} SP bán chạy, đồng bộ {$result['synced']} SP.";
-                if (!empty($result['errors'])) $msg .= ' (' . count($result['errors']) . ' lỗi)';
-                json_response(true, $msg);
+
+                $payload = [
+                    'platform' => $platform,
+                    'min_sold_count' => $minSold,
+                    'max_pages' => $maxPages,
+                    'category_ids' => $categoryIds,
+                ];
+
+                $scraperService->ensureShopeeLiveBrowser();
+                $sessionCheck = $scraperService->checkShopeeSession();
+                if (!empty($sessionCheck['captcha_required'])) {
+                    $job = queueScrapeIntervention(
+                        $pendingScrapeJobService,
+                        $scraperService,
+                        'trending',
+                        $payload,
+                        'Chrome Shopee chuyên dụng đang cần đăng nhập/vượt captcha. Vào server xử lý rồi nhắn bot "xong".'
+                    );
+                    json_response(true, 'Chrome cần can thiệp. Đã tạo job chờ #' . $job['id'] . ' và gửi Telegram.');
+                }
+
+                $job = queueScrapeAuto($pendingScrapeJobService, 'trending', $payload);
+                json_response(true, 'Chrome ổn. Đã đưa job #' . $job['id'] . ' vào hàng đợi chạy nền, web không cần chờ.');
+                break;
+
+            case '/scraper/radar':
+                $keyword = trim((string)($_POST['keyword'] ?? ''));
+                $fresh = !empty($_POST['fresh_crawl']);
+
+                if ($fresh && $keyword !== '') {
+                    $configId = $scraperService->saveConfig([
+                        'keyword' => $keyword,
+                        'platform' => 'shopee',
+                        'min_sold_count' => 0,
+                        'max_pages' => 1,
+                        'sort_by' => 'sold',
+                        'is_active' => 0,
+                    ]);
+                    try {
+                        $scraperService->runScrapeJob($configId);
+                    } finally {
+                        $scraperService->deleteConfig($configId);
+                    }
+                }
+
+                $radar = $scraperService->buildProductRadar(12);
+                $taskLogService->create('product_radar', 'success', [
+                    'keyword' => $keyword,
+                    'fresh_crawl' => $fresh,
+                ], $radar);
+                json_response(true, 'Đã phân tích ' . (int)$radar['count'] . ' cơ hội sản phẩm tiềm năng.', ['data' => $radar]);
                 break;
 
             // ── Admin: Module toggle ──
@@ -440,7 +732,7 @@ if ($method === 'POST') {
                     'password'  => (string)($_POST['password'] ?? ''),
                     'full_name' => trim((string)($_POST['full_name'] ?? '')),
                     'role_id'   => (int)($_POST['role_id'] ?? 2),
-                    'site_id'   => (int)($_POST['site_id'] ?? APP_SITE_ID),
+                    'site_id'   => (int)($_POST['site_id'] ?? currentSiteId()),
                 ]);
                 json_response(true, 'Đã tạo người dùng mới.');
                 break;
@@ -455,7 +747,7 @@ if ($method === 'POST') {
                     'password'  => (string)($_POST['password'] ?? ''),
                     'full_name' => trim((string)($_POST['full_name'] ?? '')),
                     'role_id'   => (int)($_POST['role_id'] ?? 2),
-                    'site_id'   => (int)($_POST['site_id'] ?? APP_SITE_ID),
+                    'site_id'   => (int)($_POST['site_id'] ?? currentSiteId()),
                 ]);
                 json_response(true, 'Đã cập nhật người dùng.');
                 break;
@@ -511,11 +803,6 @@ if ($method === 'POST') {
 //  PAGE ROUTES (GET — rendered with layout)
 // ══════════════════════════════════════════
 
-$samplePayload = json_encode([
-    ['source_product_id' => 'SP-1001', 'product_name' => 'Máy xay mini cầm tay', 'product_url' => 'https://example.com/products/sp-1001', 'price' => 199000, 'sold_count' => 180, 'status' => 'new'],
-    ['source_product_id' => 'SP-1002', 'product_name' => 'Đèn ngủ LED để bàn', 'product_url' => 'https://example.com/products/sp-1002', 'price' => 259000, 'sold_count' => 74, 'status' => 'new'],
-], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-
 $automationSettings = $automationSettingsService->get();
 
 switch ($path) {
@@ -540,8 +827,6 @@ switch ($path) {
             'currentPage'    => 'products',
             'productSummary' => $productSyncService->dashboardSummary(),
             'products'       => $productSyncService->allProducts(),
-            'samplePayload'  => $samplePayload,
-            'automationSettings' => $automationSettings,
         ]);
         break;
 
@@ -551,6 +836,8 @@ switch ($path) {
             'currentPage' => 'links',
             'linkSummary' => $linkService->summary(),
             'links'       => $linkService->allLinks(),
+            'products'    => $productSyncService->allProducts(),
+            'automationSettings' => $automationSettings,
         ]);
         break;
 
@@ -560,15 +847,26 @@ switch ($path) {
             'currentPage'    => 'contents',
             'contentSummary' => $contentService->summary(),
             'contents'       => $contentService->allContents(),
+            'products'       => $productSyncService->allProducts(),
+            'automationSettings' => $automationSettings,
         ]);
         break;
 
     case '/posts':
+        $postContents = [];
+        foreach ($contentService->allContents() as $content) {
+            $postContents[(int)$content['id']] = $content;
+        }
         render('posts/index', [
-            'pageTitle'   => 'Đăng bài',
-            'currentPage' => 'posts',
-            'postSummary' => $postingService->summary(),
-            'posts'       => $postingService->allPosts(),
+            'pageTitle'    => 'Đăng bài',
+            'currentPage'  => 'posts',
+            'postSummary'  => $postingService->summary(),
+            'posts'        => $postingService->allPosts(),
+            'postContents' => $postContents,
+            'contents'     => $contentService->allContents(),
+            'fanpageApiReady' => $postingService->fanpageApiAvailable(),
+            'integrationStatus' => $automationSettingsService->integrationStatus(),
+            'automationSettings' => $automationSettings,
         ]);
         break;
 
@@ -581,14 +879,31 @@ switch ($path) {
         break;
 
     case '/scraper':
+        requirePermission('scraper.view');
+        // Keep the dedicated Shopee Chrome window available for intervention/scraping.
+        $scraperService->ensureShopeeLiveBrowser();
+        $serverInfoSvc = new ServerInfoService();
         render('scraper/index', [
-            'pageTitle'       => 'Cào dữ liệu',
+            'pageTitle'       => 'Product Radar',
             'currentPage'     => 'scraper',
             'scraperSummary'  => $scraperService->summary(),
+            'shopeeSession'   => $scraperService->checkShopeeSession(),
             'productSummary'  => $productSyncService->dashboardSummary(),
             'configs'         => $scraperService->allConfigs(),
             'categories'      => $scraperService->getCategories(),
             'topProducts'     => $productSyncService->topSellingProducts(10, 50),
+            'productRadar'    => $scraperService->buildProductRadar(12),
+            'serverInfo'      => $serverInfoSvc->get(),
+        ]);
+        break;
+
+    case '/server-info':
+        requirePermission('server-info.view');
+        $serverInfo = new ServerInfoService();
+        render('server-info/index', [
+            'pageTitle'   => 'Thông tin Server',
+            'currentPage' => 'server_info',
+            'serverInfo'  => $serverInfo->get(),
         ]);
         break;
 
@@ -658,7 +973,7 @@ switch ($path) {
             'roles'         => $userService->getAllRoles(),
             'departments'   => [],
             'full_name'     => '', 'email' => '', 'username' => '',
-            'default_site_id' => (int)($_SESSION['site_id'] ?? APP_SITE_ID),
+            'default_site_id' => currentSiteId(),
             'department_id' => '', 'role_id' => 2,
             'access_sites'  => [],
             'full_name_err' => '', 'email_err' => '', 'username_err' => '',

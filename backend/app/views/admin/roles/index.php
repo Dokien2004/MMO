@@ -24,7 +24,7 @@
 <?php if(function_exists('flash')) flash('role_msg'); ?>
 
 <div class="card">
-    <div class="card-title">📋 Danh sách Vai trò</div>
+    <div class="card-title">Danh sách Vai trò</div>
     
     <?php if(empty($roles)): ?>
         <div class="empty-state">

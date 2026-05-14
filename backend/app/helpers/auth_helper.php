@@ -38,10 +38,25 @@ function currentUserId(): int
     return (int)($_SESSION['user_id'] ?? 0);
 }
 
+function currentSiteId(): int
+{
+    return max(1, (int)($_SESSION['site_id'] ?? APP_SITE_ID));
+}
+
+function currentUserDefaultSiteId(): int
+{
+    return max(1, (int)($_SESSION['user_site_id'] ?? $_SESSION['site_id'] ?? APP_SITE_ID));
+}
+
+function isSystemAdmin(): bool
+{
+    return (string)($_SESSION['user_role'] ?? '') === 'admin';
+}
+
 function currentSite(): array
 {
     return [
-        'id' => (int)($_SESSION['site_id'] ?? APP_SITE_ID),
+        'id' => currentSiteId(),
         'code' => $_SESSION['site_code'] ?? 'MAIN',
         'name' => $_SESSION['site_name'] ?? 'Main Site',
     ];

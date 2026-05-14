@@ -105,7 +105,7 @@ final class ContentService
         $contents = $this->storage->read($this->fileName);
         foreach ($contents as &$content) {
             if (!isset($content['site_id'])) {
-                $content['site_id'] = APP_SITE_ID;
+                $content['site_id'] = currentSiteId();
             }
         }
         unset($content);
@@ -145,17 +145,22 @@ final class ContentService
     private function buildDraftRecord(array $product, string $provider, int $contentId): array
     {
         $providerPayload = $this->resolveProviderPayload($product, $provider);
+        $affiliateLink = $this->affiliateLinkService->findLinkByProductId((int)$product['id']);
 
         return [
             'id' => $contentId,
-            'site_id' => (int)($product['site_id'] ?? APP_SITE_ID),
+            'site_id' => (int)($product['site_id'] ?? currentSiteId()),
             'product_id' => (int)$product['id'],
-            'affiliate_link_id' => null,
+            'affiliate_link_id' => $affiliateLink !== null ? (int)$affiliateLink['id'] : null,
             'title' => $providerPayload['title'],
             'body' => $providerPayload['body'],
             'hashtags' => $providerPayload['hashtags'],
             'call_to_action' => $providerPayload['call_to_action'],
             'ai_provider' => $providerPayload['provider_used'],
+            'media_type' => 'none',
+            'media_url' => '',
+            'media_prompt' => $this->buildMediaPrompt($product, $providerPayload),
+            'media_status' => 'pending',
             'status' => 'draft',
             'notes' => $providerPayload['notes'],
             'created_at' => date('c'),
@@ -167,7 +172,7 @@ final class ContentService
     {
         $normalized = strtolower(trim($provider));
         if ($normalized === 'auto') {
-            foreach (['gemini', 'openai'] as $aiProvider) {
+            foreach (['openai', 'gemini'] as $aiProvider) {
                 $payload = $this->tryAiProvider($product, $aiProvider);
                 if ($payload !== null) {
                     return $payload;
@@ -192,7 +197,7 @@ final class ContentService
         try {
             $result = $provider === 'gemini'
                 ? $this->geminiProvider->generate($product)
-                : $this->openAIProvider->generate($product);
+                : $this->generateWithOpenAiFallback($product);
 
             return [
                 'title' => $result['title'] !== '' ? $result['title'] : ('Review nhanh: ' . $product['product_name']),
@@ -200,7 +205,7 @@ final class ContentService
                 'hashtags' => $result['hashtags'] !== '' ? $result['hashtags'] : $this->buildTemplateHashtags($product),
                 'call_to_action' => $result['call_to_action'] !== '' ? $result['call_to_action'] : 'Nhấn vào link để xem chi tiết và giá mới nhất.',
                 'notes' => $result['notes'] ?? ('Sinh boi ' . $provider . ' API'),
-                'provider_used' => $provider,
+                'provider_used' => $provider === 'openai' ? (string)($result['provider_used'] ?? 'openai') : $provider,
             ];
         } catch (Throwable $throwable) {
             $this->taskLogService->create('ai_content_provider_failed', 'failed', [
@@ -209,6 +214,46 @@ final class ContentService
             ], [], $throwable->getMessage());
             return null;
         }
+    }
+
+    private function generateWithOpenAiFallback(array $product): array
+    {
+        $models = array_values(array_unique(array_filter([
+            openai_model(),
+            ...openai_fallback_models(),
+        ], static fn(string $model): bool => trim($model) !== '')));
+
+        $lastError = null;
+        foreach ($models as $index => $model) {
+            try {
+                $provider = new OpenAIContentProvider($model, openai_base_url(), openai_api_key());
+                $result = $provider->generate($product);
+                $result['provider_used'] = 'openai:' . $model;
+
+                if ($index > 0) {
+                    $this->taskLogService->create('ai_content_provider_fallback_success', 'success', [
+                        'product_id' => (int)($product['id'] ?? 0),
+                        'model' => $model,
+                    ]);
+                }
+
+                return $result;
+            } catch (Throwable $throwable) {
+                $lastError = $throwable;
+                $next = $models[$index + 1] ?? '';
+                $this->taskLogService->create('ai_content_provider_fallback', 'warning', [
+                    'product_id' => (int)($product['id'] ?? 0),
+                    'from_model' => $model,
+                    'to_model' => $next,
+                ], [], $throwable->getMessage());
+
+                if ($next !== '') {
+                    continue;
+                }
+            }
+        }
+
+        throw $lastError ?? new RuntimeException('Khong co OpenAI-compatible model kha dung.');
     }
 
     private function templatePayload(array $product, string $notes): array
@@ -226,17 +271,58 @@ final class ContentService
     private function buildTemplateBody(array $product): string
     {
         $price = number_format((float)($product['price'] ?? 0), 0, ',', '.');
+        $soldCount = number_format((int)($product['sold_count'] ?? 0), 0, ',', '.');
+        $soldLine = (int)($product['sold_count'] ?? 0) > 0
+            ? 'Sản phẩm đang có khoảng ' . $soldCount . ' lượt bán, phù hợp để ưu tiên làm nội dung affiliate vì đã có tín hiệu nhu cầu tốt.'
+            : 'Sản phẩm phù hợp để làm bài giới thiệu ngắn, dễ đọc và dễ gắn vào Fanpage.';
+
         return implode("\n\n", [
-            $product['product_name'] . ' dang la mot lua chon de test MVP affiliate theo dot.',
-            'Gia tham khao hien tai la ' . $price . ' VND, phu hop de tao bai review ngan va de doc.',
-            'Diem noi bat: gon nhe, de gioi thieu, de gan vao bai dang Fanpage thu cong.',
-            'Xem san pham tai day: ' . $product['affiliate_url'],
+            $product['product_name'] . ' là một lựa chọn đáng chú ý để đưa vào danh sách gợi ý mua sắm hôm nay.',
+            'Giá tham khảo hiện tại khoảng ' . $price . ' VND. Boss nên kiểm tra lại giá tại thời điểm đăng vì sàn có thể thay đổi theo khuyến mãi.',
+            $soldLine,
+            'Nếu bạn đang tìm một sản phẩm dễ chia sẻ, có link mua rõ ràng và phù hợp để đăng bài review ngắn, đây là lựa chọn nên thử.',
+            'Xem chi tiết tại đây: ' . $product['affiliate_url'],
         ]);
     }
 
     private function buildTemplateHashtags(array $product): string
     {
         return '#affiliate #mvp #reviewnhanh #' . preg_replace('/[^a-z0-9]+/i', '', strtolower((string)$product['source_platform']));
+    }
+
+    private function buildMediaPrompt(array $product, array $providerPayload): string
+    {
+        $price = number_format((float)($product['price'] ?? 0), 0, ',', '.');
+        return implode(' ', [
+            'Ảnh quảng cáo affiliate vuông 1:1, phong cách hiện đại, sạch, phù hợp đăng Facebook.',
+            'Sản phẩm chính: ' . (string)($product['product_name'] ?? ''),
+            'Giá tham khảo: ' . $price . ' VND.',
+            'Bố cục: sản phẩm nổi bật ở trung tâm, nền sáng, điểm nhấn màu cam Shopee, có khoảng trống cho tiêu đề ngắn.',
+            'Không dùng logo thương hiệu nếu không chắc bản quyền, không bịa thông số, không chèn chữ quá nhiều.',
+            'Ý tưởng tiêu đề: ' . (string)($providerPayload['title'] ?? ''),
+        ]);
+    }
+
+    public function attachMedia(int $contentId, string $mediaType, string $mediaUrl, string $mediaPrompt = '', string $mediaStatus = 'ready'): array
+    {
+        $contents = $this->allContents();
+        foreach ($contents as &$content) {
+            if ((int)($content['id'] ?? 0) !== $contentId) {
+                continue;
+            }
+            $content['media_type'] = $mediaType;
+            $content['media_url'] = $mediaUrl;
+            if ($mediaPrompt !== '') {
+                $content['media_prompt'] = $mediaPrompt;
+            }
+            $content['media_status'] = $mediaStatus;
+            $content['updated_at'] = date('c');
+            $this->saveContents($contents);
+            return $content;
+        }
+        unset($content);
+
+        throw new InvalidArgumentException('Khong tim thay content can gan media.');
     }
 
     private function changeStatus(int $contentId, string $status): array
@@ -311,9 +397,6 @@ final class ContentService
 
     private function nextId(array $contents): int
     {
-        $ids = array_map(static function (array $content): int {
-            return (int)($content['id'] ?? 0);
-        }, $contents);
-        return empty($ids) ? 1 : (max($ids) + 1);
+        return $this->storage->nextId($this->fileName);
     }
 }

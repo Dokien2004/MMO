@@ -36,7 +36,7 @@ function renderRecipientBlock($prefix, $dbPrefix, $config, $roles, $users, $badg
 ?>
     <!-- Kiểu người nhận -->
     <div class="mb-3">
-        <div class="sub-section-title">📋 Kiểu người nhận</div>
+        <div class="sub-section-title">Kiểu người nhận</div>
         <div class="d-flex gap-4">
             <div class="form-check">
                 <input class="form-check-input recipient-type-radio" type="radio"
@@ -61,7 +61,7 @@ function renderRecipientBlock($prefix, $dbPrefix, $config, $roles, $users, $badg
 
     <!-- Chọn vai trò -->
     <div class="mb-3" id="<?= $prefix ?>RolesSection">
-        <div class="sub-section-title">👥 Chọn vai trò</div>
+        <div class="sub-section-title">Chọn vai trò</div>
         <div class="row">
             <?php foreach ($roles as $role): ?>
                 <div class="col-md-6 col-lg-4 mb-2">
@@ -81,7 +81,7 @@ function renderRecipientBlock($prefix, $dbPrefix, $config, $roles, $users, $badg
 
     <!-- Chọn người dùng -->
     <div class="mb-3" id="<?= $prefix ?>UsersSection" style="display: none;">
-        <div class="sub-section-title">👤 Chọn người dùng</div>
+        <div class="sub-section-title">Chọn người dùng</div>
         <div class="mb-2">
             <input type="text" id="<?= $prefix ?>UserSearchBox" class="form-control form-control-sm mb-2"
                    placeholder="Tìm theo tên, email hoặc phòng ban...">
@@ -98,7 +98,7 @@ function renderRecipientBlock($prefix, $dbPrefix, $config, $roles, $users, $badg
                     <?php endif; ?>
                 <?php endforeach; ?>
             </select>
-            <small class="text-muted">💡 Click vào người dùng để thêm</small>
+            <small class="text-muted">Click vào người dùng để thêm</small>
         </div>
         <div class="mb-2">
             <label class="form-label fw-bold small">
@@ -129,7 +129,7 @@ function renderRecipientBlock($prefix, $dbPrefix, $config, $roles, $users, $badg
     <!-- Email bổ sung + CC -->
     <div class="row g-3">
         <div class="col-lg-6">
-            <div class="sub-section-title">📧 Email bổ sung</div>
+            <div class="sub-section-title">Email bổ sung</div>
             <?php
                 $emailWrapId = "{$prefix}EmailTagWrap";
                 $emailInputId = "{$prefix}NewEmailInput";
@@ -157,7 +157,7 @@ function renderRecipientBlock($prefix, $dbPrefix, $config, $roles, $users, $badg
             <input type="hidden" name="<?= $emailHiddenName ?>" id="<?= $emailHiddenId ?>" value="">
         </div>
         <div class="col-lg-6">
-            <div class="sub-section-title">📋 Email CC</div>
+            <div class="sub-section-title">Email CC</div>
             <?php
                 $ccWrapId = "{$prefix}CcTagWrap";
                 $ccInputId = "{$prefix}NewCcInput";

@@ -335,8 +335,8 @@
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">Nguyên tắc duyệt</label>
                             <select name="approval_logic" id="modLogic" class="form-select border-primary bg-blue-50 text-primary fw-bold">
-                                <option value="ANY">✅ Bất kỳ ai (First wins)</option>
-                                <option value="ALL">👥 Tất cả đồng thuận (Consensus)</option>
+                                <option value="ANY">Bất kỳ ai (First wins)</option>
+                                <option value="ALL">Tất cả đồng thuận (Consensus)</option>
                             </select>
                             <div class="form-text small" style="font-size: 11px;">"Tất cả" nghĩa là toàn bộ người trong danh sách phải duyệt.</div>
                         </div>

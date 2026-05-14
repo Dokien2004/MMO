@@ -1,3 +1,3 @@
-2026/05/03-23:19:42.670 4ff5 Reusing MANIFEST /opt/lampp/htdocs/affiliate-mvp-laptop/storage/browser/shopee-profile/Default/Local Storage/leveldb/MANIFEST-000001
-2026/05/03-23:19:42.679 4ff5 Recovering log #4
-2026/05/03-23:19:42.680 4ff5 Reusing old log /opt/lampp/htdocs/affiliate-mvp-laptop/storage/browser/shopee-profile/Default/Local Storage/leveldb/000004.log 
+2026/05/04-13:49:10.215 1c4369 Reusing MANIFEST /home/dokien/.openclaw/workspace/MMO/storage/browser/shopee-profile/Default/Local Storage/leveldb/MANIFEST-000001
+2026/05/04-13:49:10.243 1c4369 Recovering log #4
+2026/05/04-13:49:10.243 1c4369 Reusing old log /home/dokien/.openclaw/workspace/MMO/storage/browser/shopee-profile/Default/Local Storage/leveldb/000004.log 

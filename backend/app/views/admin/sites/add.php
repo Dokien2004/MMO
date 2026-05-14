@@ -1,96 +1,124 @@
+<?php
+$allSites = $all_sites ?? [];
+?>
 
-<div class="container-fluid px-4 mt-4">
-    
-    <form action="<?= url('/admin') ?>/sites/add" method="POST">
-        
-        <input type="hidden" name="csrf_token" value="<?php echo $csrf_token ?? ''; ?>">
-
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <div class="d-flex align-items-center">
-                <a href="<?= url('/admin') ?>/sites" class="btn btn-outline-secondary btn-sm me-3 shadow-sm rounded-circle" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;" title="Quay lại danh sách">
-                    <i class="fas fa-arrow-left"></i>
-                </a>
-                <div>
-                    <h4 class="mb-0 text-primary fw-bold">Thêm Site Mới</h4>
-                    <small class="text-muted">Tạo mới Nhà máy hoặc Chi nhánh</small>
-                </div>
-            </div>
-            <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm">
-                <i class="fas fa-save me-2"></i> Lưu dữ liệu
-            </button>
-        </div>
-
-        <div class="row justify-content-center">
-            <div class="col-lg-8">
-                <div class="card shadow-sm border-0">
-                    <div class="card-header bg-white py-3 border-bottom">
-                        <h6 class="m-0 fw-bold text-dark"><i class="fas fa-info-circle me-2 text-primary"></i>Thông tin cấu hình</h6>
-                    </div>
-                    
-                    <div class="card-body p-4">
-                        <div class="row g-3">
-                            
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">Mã Site (Code) <span class="text-danger">*</span></label>
-                                <input type="text" name="code" 
-                                       class="form-control text-uppercase font-monospace <?php echo (!empty($data['code_err'])) ? 'is-invalid' : ''; ?>" 
-                                       value="<?php echo isset($data['code']) ? $data['code'] : ''; ?>" 
-                                       placeholder="VD: HN-SITE-01" autofocus>
-                                <div class="invalid-feedback"><?php echo $data['code_err'] ?? ''; ?></div>
-                                <div class="form-text small">Mã định danh duy nhất (Viết liền, không dấu).</div>
-                            </div>
-
-                            <div class="col-md-8">
-                                <label class="form-label fw-bold">Tên hiển thị <span class="text-danger">*</span></label>
-                                <input type="text" name="name" 
-                                       class="form-control <?php echo (!empty($data['name_err'])) ? 'is-invalid' : ''; ?>" 
-                                       value="<?php echo isset($data['name']) ? $data['name'] : ''; ?>" 
-                                       placeholder="VD: Nhà máy Bắc Ninh">
-                                <div class="invalid-feedback"><?php echo $data['name_err'] ?? ''; ?></div>
-                            </div>
-
-                            <div class="col-12">
-                                <label class="form-label fw-bold">Địa chỉ</label>
-                                <textarea name="address" class="form-control" rows="2" placeholder="Địa chỉ chi tiết..."><?php echo isset($data['address']) ? $data['address'] : ''; ?></textarea>
-                            </div>
-
-                            <div class="col-12"><hr class="text-muted my-2"></div>
-
-                            <div class="col-md-6">
-                                <label class="form-label fw-bold">Trực thuộc (Site Cha)</label>
-                                <select name="parent_site_id" class="form-select">
-                                    <option value="">-- Là cấp cao nhất (Không có cha) --</option>
-                                    <?php if(isset($data['all_sites']) && !empty($data['all_sites'])): ?>
-                                        <?php foreach($data['all_sites'] as $site): ?>
-                                            <option value="<?php echo $site->id; ?>" <?php echo (isset($data['parent_site_id']) && $data['parent_site_id'] == $site->id) ? 'selected' : ''; ?>>
-                                                <?php echo $site->code . ' - ' . $site->name; ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </select>
-                                <div class="form-text text-muted small">Chọn site quản lý cấp trên nếu đây là chi nhánh con.</div>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label class="form-label fw-bold mb-2 d-block">Tùy chọn nâng cao</label>
-                                
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" name="is_master" id="isMaster" value="1" <?php echo (isset($data['is_master']) && $data['is_master'] == 1) ? 'checked' : ''; ?>>
-                                    <label class="form-check-label fw-bold text-dark" for="isMaster">Là Master Site</label>
-                                    <div class="small text-muted" style="line-height: 1.2;">Dùng để định nghĩa Sản phẩm/BOM chung toàn tập đoàn.</div>
-                                </div>
-
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" name="is_active" id="isActive" value="1" <?php echo (isset($data['is_active']) && $data['is_active'] == 1) ? 'checked' : ''; ?>>
-                                    <label class="form-check-label" for="isActive">Kích hoạt hoạt động</label>
-                                </div>
-                            </div>
-
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </form>
+<div class="page-header">
+    <div>
+        <div class="page-kicker">Admin / Sites</div>
+        <h2>Thêm Site mới</h2>
+        <p>Tạo nhà máy, chi nhánh hoặc site làm việc mới cho hệ thống.</p>
+    </div>
+    <div class="hero-actions">
+        <a href="<?= url('/admin/sites') ?>" class="btn btn-ghost">← Quay lại danh sách</a>
+    </div>
 </div>
 
+<div class="publish-mode-grid">
+    <div class="card publish-mode-card ready">
+        <div class="section-heading">
+            <div>
+                <div class="card-title">Thông tin cơ bản</div>
+                <div class="section-note">Nhập mã site và tên hiển thị. Mã site nên ngắn, viết liền, không dấu.</div>
+            </div>
+        </div>
+
+        <form data-ajax method="POST" action="<?= url('/admin/sites/store') ?>">
+            <input type="hidden" name="csrf_token" value="<?= e((string)($csrf_token ?? ($_SESSION['csrf_token'] ?? ''))) ?>">
+
+            <div class="grid-2 compact-grid">
+                <div class="form-group">
+                    <label class="form-label">Mã Site <span class="text-danger">*</span></label>
+                    <input class="form-control" name="code" required autofocus placeholder="VD: HN-SITE-01" value="<?= e((string)($code ?? '')) ?>" style="text-transform:uppercase">
+                    <div class="sub">Chỉ dùng chữ, số, gạch ngang hoặc gạch dưới. Hệ thống sẽ tự chuẩn hóa viết hoa.</div>
+                    <?php if (!empty($code_err ?? '')): ?><div class="text-danger text-sm mt-8"><?= e((string)$code_err) ?></div><?php endif; ?>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Tên hiển thị <span class="text-danger">*</span></label>
+                    <input class="form-control" name="name" required placeholder="VD: Chi nhánh Hà Nội" value="<?= e((string)($name ?? '')) ?>">
+                    <div class="sub">Tên này sẽ hiển thị ở sidebar/topbar và danh sách quản trị.</div>
+                    <?php if (!empty($name_err ?? '')): ?><div class="text-danger text-sm mt-8"><?= e((string)$name_err) ?></div><?php endif; ?>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Địa chỉ</label>
+                <textarea class="form-control" name="address" rows="3" placeholder="Địa chỉ chi tiết..."> <?= e((string)($address ?? '')) ?></textarea>
+            </div>
+
+            <div class="grid-2 compact-grid">
+                <div class="form-group">
+                    <label class="form-label">Trực thuộc Site cha</label>
+                    <select class="form-control" name="parent_site_id">
+                        <option value="">Cấp cao nhất / không có site cha</option>
+                        <?php foreach ($allSites as $site): ?>
+                            <?php
+                            $siteId = (int)($site['id'] ?? $site->id ?? 0);
+                            $siteCode = (string)($site['code'] ?? $site->code ?? '');
+                            $siteName = (string)($site['name'] ?? $site->name ?? '');
+                            ?>
+                            <option value="<?= $siteId ?>" <?= ((string)($parent_site_id ?? '') === (string)$siteId) ? 'selected' : '' ?>>
+                                <?= e($siteCode . ' — ' . $siteName) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="sub">Chọn site quản lý cấp trên nếu đây là chi nhánh con.</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Trạng thái & vai trò</label>
+                    <div class="option-stack">
+                        <label class="option-row">
+                            <input type="checkbox" name="is_active" value="1" <?= ((int)($is_active ?? 1) === 1) ? 'checked' : '' ?>>
+                            <span>
+                                <strong>Kích hoạt site</strong>
+                                <small>Cho phép người dùng chuyển sang site này.</small>
+                            </span>
+                        </label>
+                        <label class="option-row">
+                            <input type="checkbox" name="is_master" value="1" <?= !empty($is_master ?? 0) ? 'checked' : '' ?>>
+                            <span>
+                                <strong>Master Site</strong>
+                                <small>Dùng làm site quản lý/cấu hình chung nếu cần.</small>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-strip mt-16">
+                <div>
+                    <strong>Sẵn sàng tạo site?</strong>
+                    <div class="sub">Sau khi lưu, Boss có thể quay lại danh sách để chuyển site hoặc chỉnh sửa.</div>
+                </div>
+                <div class="btn-group">
+                    <a href="<?= url('/admin/sites') ?>" class="btn btn-ghost">Hủy</a>
+                    <button type="submit" class="btn btn-accent">Lưu site mới</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="card publish-mode-card">
+        <div class="section-heading">
+            <div>
+                <div class="card-title">Gợi ý cấu hình</div>
+                <div class="section-note">Một vài quy ước để dữ liệu site dễ quản lý hơn.</div>
+            </div>
+        </div>
+        <div class="quick-guide">
+            <div class="guide-item">
+                <strong>Mã site</strong>
+                <span>Dùng dạng <code>HN-SITE-01</code>, <code>HCM-CN-01</code> hoặc <code>MAIN</code>.</span>
+            </div>
+            <div class="guide-item">
+                <strong>Site cha</strong>
+                <span>Để trống nếu là cấp cao nhất; chọn site cha nếu là chi nhánh con.</span>
+            </div>
+            <div class="guide-item">
+                <strong>Master Site</strong>
+                <span>Chỉ bật cho site trung tâm/quản lý chung, không nên bật tràn lan.</span>
+            </div>
+        </div>
+    </div>
+</div>

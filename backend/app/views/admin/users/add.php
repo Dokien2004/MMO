@@ -17,7 +17,7 @@
 
     <div class="grid-2" style="align-items: start;">
         <div class="card">
-            <div class="card-title">👤 Thông tin tài khoản</div>
+            <div class="card-title">Thông tin tài khoản</div>
 
             <div class="form-group">
                 <label class="form-label">Họ và tên</label>
@@ -87,7 +87,7 @@
         </div>
 
         <div class="card">
-            <div class="card-title">🛡️ Phân quyền ban đầu</div>
+            <div class="card-title">Phân quyền ban đầu</div>
 
             <div class="form-group">
                 <label class="form-label">Site mặc định</label>

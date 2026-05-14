@@ -15,6 +15,14 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function randomInt(min, max) {
+  return Math.floor(min + Math.random() * (max - min + 1));
+}
+
+async function humanDelay(minMs = 2500, maxMs = 7000) {
+  await sleep(randomInt(minMs, maxMs));
+}
+
 async function getFreePort() {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -50,10 +58,15 @@ function findChromePath() {
 }
 
 async function waitForDebugger(port, timeoutMs) {
+  return waitForDebuggerUrl(`http://127.0.0.1:${port}`, timeoutMs);
+}
+
+async function waitForDebuggerUrl(cdpUrl, timeoutMs) {
+  const baseUrl = String(cdpUrl || '').replace(/\/$/, '');
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/json/list`);
+      const response = await fetch(`${baseUrl}/json/list`);
       if (response.ok) {
         const targets = await response.json();
         const pageTarget = targets.find((target) => target.type === 'page' && target.webSocketDebuggerUrl);
@@ -174,7 +187,7 @@ function createLoadWaiter(client) {
 }
 
 async function navigate(client, waitForLoad, url) {
-  const waiter = waitForLoad();
+  const waiter = waitForLoad(60000);
   await client.send('Page.navigate', { url });
   await waiter;
 }
@@ -192,6 +205,49 @@ async function evaluate(client, expression) {
   }
 
   return result.result ? result.result.value : null;
+}
+
+async function waitForShopeePageSettled(client, timeoutMs = 45000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastHtmlLength = 0;
+  let stableTicks = 0;
+
+  while (Date.now() < deadline) {
+    const state = await evaluate(client, `(() => {
+      const text = document.body ? document.body.innerText : '';
+      return {
+        readyState: document.readyState,
+        href: location.href,
+        title: document.title,
+        htmlLength: document.documentElement ? document.documentElement.outerHTML.length : 0,
+        linkCount: document.querySelectorAll('a').length,
+        productLinkCount: document.querySelectorAll('a[href*="-i."], a[href*="/product/"]').length,
+        text: text.slice(0, 500),
+      };
+    })()`);
+
+    const href = String(state?.href || '');
+    if (/\/verify\/(traffic|captcha)/.test(href)) {
+      // Give Shopee a little time in case the verification page auto-recovers,
+      // but do not keep scraping while it is still there.
+      await humanDelay(8000, 14000);
+      return state;
+    }
+
+    const htmlLength = Number(state?.htmlLength || 0);
+    const ready = state?.readyState === 'complete' || state?.readyState === 'interactive';
+    const hasUsefulDom = Number(state?.productLinkCount || 0) > 0 || Number(state?.linkCount || 0) > 35 || htmlLength > 90000;
+    if (ready && hasUsefulDom && Math.abs(htmlLength - lastHtmlLength) < 3000) {
+      stableTicks += 1;
+      if (stableTicks >= 2) return state;
+    } else {
+      stableTicks = 0;
+    }
+    lastHtmlLength = htmlLength;
+    await humanDelay(1800, 3600);
+  }
+
+  return evaluate(client, `({ href: location.href, title: document.title, text: document.body.innerText.slice(0, 500), htmlLength: document.documentElement.outerHTML.length, linkCount: document.querySelectorAll('a').length })`);
 }
 
 function buildJobConfig(job) {
@@ -347,7 +403,7 @@ function isRelevantShopeeApi(url) {
     /(search_items|recommend|daily_discover|item|get_pc)/.test(url);
 }
 
-async function collectNetworkProducts(client, job, action, waitMs = 7000) {
+async function collectNetworkProducts(client, job, action, waitMs = 18000) {
   const pending = new Map();
   const products = [];
   const errors = [];
@@ -469,10 +525,13 @@ async function runJob(client, waitForLoad, job) {
         throw error;
       }
     }
-    await sleep(2500);
-    await evaluate(client, `window.scrollTo(0, Math.floor(document.body.scrollHeight * 0.45)); true`);
-    await sleep(1200);
-    await evaluate(client, `window.scrollTo(0, document.body.scrollHeight); true`);
+    await waitForShopeePageSettled(client, 45000);
+    await humanDelay(3500, 9000);
+    await evaluate(client, `window.scrollBy({ top: Math.floor(window.innerHeight * 0.8), behavior: 'smooth' }); true`);
+    await humanDelay(2500, 6500);
+    await evaluate(client, `window.scrollBy({ top: Math.floor(window.innerHeight * 1.3), behavior: 'smooth' }); true`);
+    await humanDelay(3000, 8000);
+    await evaluate(client, `window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); true`);
   });
 
   if (network.products.length > 0) {
@@ -485,8 +544,8 @@ async function runJob(client, waitForLoad, job) {
   }
 
   const trafficState = await evaluate(client, `({ href: location.href, title: document.title, text: document.body.innerText.slice(0, 300) })`);
-  if (trafficState && String(trafficState.href || '').includes('/verify/traffic/error')) {
-    throw new Error('Shopee traffic verification blocked the browser session. Login/refresh cookies in a real browser profile or use a stable residential proxy. Page text: ' + String(trafficState.text || '').replace(/\s+/g, ' ').slice(0, 220));
+  if (trafficState && /\/verify\/(traffic|captcha)/.test(String(trafficState.href || ''))) {
+    throw new Error('Shopee verification blocked the live browser session. Open the live Shopee window and complete captcha/verification, then run again. Page text: ' + String(trafficState.text || '').replace(/\s+/g, ' ').slice(0, 220));
   }
 
   const fetchResult = await evaluate(client, buildFetchExpression(config));
@@ -521,66 +580,71 @@ async function main() {
     throw new Error('No jobs provided');
   }
 
-  const chromePath = findChromePath();
-  const port = await getFreePort();
+  const cdpUrl = input.cdpUrl || process.env.SHOPEE_LIVE_CDP_URL || '';
+  const useLiveCdp = cdpUrl !== '';
+  const chromePath = useLiveCdp ? null : findChromePath();
+  const port = useLiveCdp ? null : await getFreePort();
   let userDataDir =
     input.userDataDir ||
     path.join(process.cwd(), 'storage', 'browser', 'shopee-profile');
 
-  // Always use a disposable copy when a profile is supplied. Chromium creates
-  // many LOCK files under Default/* and stale locks can prevent CDP startup.
-  if (input.userDataDir) {
-    const sourceProfileDir = userDataDir;
-    userDataDir = path.join(os.tmpdir(), `mmo-shopee-profile-${process.pid}-${Date.now()}`);
-    if (fs.existsSync(sourceProfileDir)) {
-      fs.cpSync(sourceProfileDir, userDataDir, {
-        recursive: true,
-        force: true,
-        errorOnExist: false,
-        filter: (source) => !/^(Singleton(?:Cookie|Lock|Socket)|LOCK)$/.test(path.basename(source)),
-      });
-    }
-  } else {
-    try {
-      fs.lstatSync(path.join(userDataDir, 'SingletonLock'));
+  let chrome = null;
+  if (!useLiveCdp) {
+    // Always use a disposable copy when a profile is supplied. Chromium creates
+    // many LOCK files under Default/* and stale locks can prevent CDP startup.
+    if (input.userDataDir) {
+      const sourceProfileDir = userDataDir;
       userDataDir = path.join(os.tmpdir(), `mmo-shopee-profile-${process.pid}-${Date.now()}`);
-    } catch (_error) {
-      // No SingletonLock found; the configured profile can be used.
+      if (fs.existsSync(sourceProfileDir)) {
+        fs.cpSync(sourceProfileDir, userDataDir, {
+          recursive: true,
+          force: true,
+          errorOnExist: false,
+          filter: (source) => !/^(Singleton(?:Cookie|Lock|Socket)|LOCK)$/.test(path.basename(source)),
+        });
+      }
+    } else {
+      try {
+        fs.lstatSync(path.join(userDataDir, 'SingletonLock'));
+        userDataDir = path.join(os.tmpdir(), `mmo-shopee-profile-${process.pid}-${Date.now()}`);
+      } catch (_error) {
+        // No SingletonLock found; the configured profile can be used.
+      }
     }
+
+    fs.mkdirSync(userDataDir, { recursive: true });
+
+    const chromeArgs = [
+      `--remote-debugging-port=${port}`,
+      `--user-data-dir=${userDataDir}`,
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-background-networking',
+      '--disable-features=Translate,OptimizationHints,MediaRouter',
+      '--disable-popup-blocking',
+      '--disable-renderer-backgrounding',
+      '--window-size=1365,900',
+      '--lang=vi-VN',
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+    ];
+
+    if (input.headless !== false) {
+      chromeArgs.push('--headless=new');
+    }
+
+    chromeArgs.push('about:blank');
+
+    chrome = spawn(chromePath, chromeArgs, {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
   }
-
-  fs.mkdirSync(userDataDir, { recursive: true });
-
-  const chromeArgs = [
-    `--remote-debugging-port=${port}`,
-    `--user-data-dir=${userDataDir}`,
-    '--no-first-run',
-    '--no-default-browser-check',
-    '--disable-blink-features=AutomationControlled',
-    '--disable-background-networking',
-    '--disable-features=Translate,OptimizationHints,MediaRouter',
-    '--disable-popup-blocking',
-    '--disable-renderer-backgrounding',
-    '--window-size=1365,900',
-    '--lang=vi-VN',
-    '--no-sandbox',
-    '--disable-dev-shm-usage',
-  ];
-
-  if (input.headless !== false) {
-    chromeArgs.push('--headless=new');
-  }
-
-  chromeArgs.push('about:blank');
-
-  const chrome = spawn(chromePath, chromeArgs, {
-    stdio: 'ignore',
-    windowsHide: true,
-  });
 
   let client = null;
   try {
-    const wsUrl = await waitForDebugger(port, 30000);
+    const wsUrl = useLiveCdp ? await waitForDebuggerUrl(cdpUrl, 10000) : await waitForDebugger(port, 30000);
     client = new CdpClient(wsUrl);
     await client.connect();
     await client.send('Page.enable');
@@ -609,7 +673,7 @@ async function main() {
       } catch (error) {
         results.push({ job, error: error.message });
       }
-      await sleep(1200);
+      await humanDelay(9000, 18000);
     }
 
     process.stdout.write(JSON.stringify({ ok: true, results }, null, 2));
@@ -618,7 +682,7 @@ async function main() {
       await client.close().catch(() => {});
     }
 
-    if (!chrome.killed) {
+    if (chrome && !chrome.killed) {
       chrome.kill();
     }
   }

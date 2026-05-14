@@ -99,7 +99,7 @@ function renderDeptFilterOptions($tree, $parentId = 0, $level = 0, $selectedId =
 </div>
 
 <div class="card">
-    <div class="card-title">📋 Danh sách người dùng</div>
+    <div class="card-title">Danh sách người dùng</div>
     
     <?php if(empty($users)): ?>
         <div class="empty-state">
