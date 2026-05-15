@@ -173,7 +173,7 @@ final class ProductSyncService
         return $result['products'][0] ?? [];
     }
 
-    public function importProductsFromFile(string $tmpPath, string $originalName, string $platform = 'manual'): array
+    public function parseProductsFromFile(string $tmpPath, string $originalName): array
     {
         if (!is_file($tmpPath)) {
             throw new InvalidArgumentException('Không tìm thấy file import.');
@@ -192,6 +192,12 @@ final class ProductSyncService
             throw new InvalidArgumentException('File import không có dòng sản phẩm hợp lệ.');
         }
 
+        return $rows;
+    }
+
+    public function importProductsFromFile(string $tmpPath, string $originalName, string $platform = 'manual'): array
+    {
+        $rows = $this->parseProductsFromFile($tmpPath, $originalName);
         return $this->syncBatch($this->sanitizePlatform($platform), $rows);
     }
 

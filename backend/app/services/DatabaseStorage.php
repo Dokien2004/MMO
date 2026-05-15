@@ -255,7 +255,7 @@ CREATE TABLE IF NOT EXISTS affiliate_links (
     KEY idx_links_campaign (campaign_code),
     KEY idx_links_updated_at (updated_at),
     CONSTRAINT fk_links_product
-        FOREIGN KEY (product_id) REFERENCES affiliate_products (id)
+        FOREIGN KEY (product_id) REFERENCES user_selected_products (id)
         ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT chk_links_status CHECK (status IN ('active', 'expired', 'error'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -286,7 +286,7 @@ CREATE TABLE IF NOT EXISTS generated_contents (
     KEY idx_contents_provider (ai_provider),
     KEY idx_contents_updated_at (updated_at),
     CONSTRAINT fk_contents_product
-        FOREIGN KEY (product_id) REFERENCES affiliate_products (id)
+        FOREIGN KEY (product_id) REFERENCES user_selected_products (id)
         ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT fk_contents_link
         FOREIGN KEY (affiliate_link_id) REFERENCES affiliate_links (id)
@@ -319,7 +319,7 @@ CREATE TABLE IF NOT EXISTS scheduled_posts (
         FOREIGN KEY (content_id) REFERENCES generated_contents (id)
         ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT fk_posts_product
-        FOREIGN KEY (product_id) REFERENCES affiliate_products (id)
+        FOREIGN KEY (product_id) REFERENCES user_selected_products (id)
         ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT chk_posts_status CHECK (status IN ('scheduled', 'success', 'failed'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci

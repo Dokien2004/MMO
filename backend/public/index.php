@@ -394,6 +394,7 @@ if ($path === '/api/posts') {
     exit;
 }
 
+
 // ── API: Product Scores ──
 if ($path === '/api/product-scores') {
     requirePermission('products.view');
@@ -401,6 +402,36 @@ if ($path === '/api/product-scores') {
     echo json_encode(['success' => true, 'data' => $scoringService->getTopRecommendations(30)], JSON_UNESCAPED_UNICODE);
     exit;
 }
+
+// ── API: Scraper browser status (async — gọi sau khi trang /scraper đã render) ──
+if ($path === '/api/scraper/status') {
+    requirePermission('scraper.view');
+    header('Content-Type: application/json');
+    try {
+        // Gọi ensureShopeeLiveBrowser ở đây thay vì block page render
+        $scraperService->ensureShopeeLiveBrowser();
+        $session = $scraperService->checkShopeeSession();
+        echo json_encode(['success' => true, 'data' => $session], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
+    exit;
+}
+
+// ── API: Product Radar (async — tốn 2-3s, gọi sau khi trang đã render) ──
+if ($path === '/api/scraper/radar') {
+    requirePermission('scraper.view');
+    header('Content-Type: application/json');
+    try {
+        $limit = max(3, min(30, (int)($_GET['limit'] ?? 12)));
+        $radar = $scraperService->buildProductRadar($limit);
+        echo json_encode(['success' => true, 'data' => $radar], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
+    exit;
+}
+
 
 if ($path === '/api/score-distribution') {
     requirePermission('products.view');
@@ -590,6 +621,7 @@ $postPermissionMap = [
     '/my-products/pick'           => 'products.view',
     '/my-products/generate-content' => 'products.view',
     '/channels/create'             => 'settings.edit',
+    '/products/select-scraped'     => 'products.view',
 ];
 
 if ($method === 'POST') {
@@ -614,8 +646,41 @@ if ($method === 'POST') {
                 break;
 
             case '/products/store':
-                $product = $productSyncService->createManualProduct($_POST);
-                json_response(true, 'Đã lưu sản phẩm thủ công #' . (int)($product['id'] ?? 0) . '.', ['data' => $product]);
+                $data = $_POST;
+                $data['source_platform'] = trim((string)($data['source_platform'] ?? 'manual'));
+                if (empty($data['source_product_id'])) {
+                    $data['source_product_id'] = substr(sha1($data['product_url'] ?? ''), 0, 16);
+                }
+                if (!empty($data['affiliate_url']) && empty($data['status'])) {
+                    $data['status'] = 'pending';
+                }
+                $product = $userSelectedProductService->upsert($data);
+                json_response(true, 'Đã lưu sản phẩm thủ công vào My Products.', ['data' => $product]);
+                break;
+
+            case '/products/select-scraped':
+                // Chuyển 1 sản phẩm từ affiliate_products sang user_selected_products
+                $productId = (int)($_POST['product_id'] ?? 0);
+                if ($productId <= 0) throw new InvalidArgumentException('product_id không hợp lệ.');
+                $pdo = db_pdo();
+                $stmt = $pdo->prepare(
+                    'SELECT id, product_name, product_url, source_platform, source_product_id, price, sold_count, affiliate_url, notes
+                     FROM affiliate_products WHERE id = ? AND site_id = ?'
+                );
+                $stmt->execute([$productId, (int)currentSiteId()]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$row) json_response(false, 'Không tìm thấy sản phẩm #' . $productId . ' trong kho cào.');
+                $saved = $userSelectedProductService->upsert([
+                    'source_product_id' => $row['source_product_id'],
+                    'product_name'      => $row['product_name'],
+                    'product_url'       => $row['product_url'],
+                    'affiliate_url'     => $row['affiliate_url'] ?? '',
+                    'source_platform'   => $row['source_platform'],
+                    'price'             => $row['price'],
+                    'notes'             => $row['notes'] ?? '',
+                    'status'            => !empty($row['affiliate_url']) ? 'pending' : 'pending',
+                ]);
+                json_response(true, 'Đã thêm "' . mb_substr($row['product_name'], 0, 40) . '" vào My Products.', ['data' => $saved]);
                 break;
 
             case '/products/import':
@@ -627,8 +692,22 @@ if ($method === 'POST') {
                     throw new InvalidArgumentException('Upload file lỗi, mã lỗi: ' . (int)($file['error'] ?? -1));
                 }
                 $platform = trim((string)($_POST['platform'] ?? 'manual'));
-                $result = $productSyncService->importProductsFromFile((string)$file['tmp_name'], (string)$file['name'], $platform);
-                json_response(true, 'Đã import ' . $result['summary']['received_count'] . ' sản phẩm. Thêm mới: ' . $result['summary']['inserted_count'] . ', cập nhật: ' . $result['summary']['updated_count'] . '.', ['data' => $result['summary']]);
+                $rows = $productSyncService->parseProductsFromFile((string)$file['tmp_name'], (string)$file['name']);
+                $inserted = 0;
+                $updated = 0;
+                foreach ($rows as $row) {
+                    $row['source_platform'] = $platform;
+                    if (empty($row['source_product_id'])) {
+                        $row['source_product_id'] = substr(sha1($row['product_url'] ?? ''), 0, 16);
+                    }
+                    if (!empty($row['affiliate_url']) && empty($row['status'])) {
+                        $row['status'] = 'pending';
+                    }
+                    $existing = $userSelectedProductService->findBySourceProductId($row['source_product_id'], $platform);
+                    $userSelectedProductService->upsert($row);
+                    if ($existing) $updated++; else $inserted++;
+                }
+                json_response(true, 'Đã import ' . count($rows) . ' sản phẩm vào My Products. Thêm mới: ' . $inserted . ', cập nhật: ' . $updated . '.', ['data' => ['received_count' => count($rows), 'inserted_count' => $inserted, 'updated_count' => $updated]]);
                 break;
 
             case '/products/select':
@@ -821,6 +900,61 @@ if ($method === 'POST') {
             case '/settings/check-facebook-token':
                 $facebookCheck = (new FacebookPagePublisher())->checkToken();
                 json_response((bool)$facebookCheck['ok'], (string)$facebookCheck['message'], ['data' => $facebookCheck]);
+                break;
+
+            // ── Prompt Templates ──
+            case '/prompts/save':
+                requirePermission('settings.edit');
+                $promptService = new PromptTemplateService();
+                $templateId = (int)($_POST['id'] ?? 0);
+                if ($templateId > 0) {
+                    $promptService->update($templateId, $_POST);
+                    json_response(true, 'Đã cập nhật prompt template #' . $templateId . '.');
+                } else {
+                    $newId = $promptService->create($_POST);
+                    json_response(true, 'Đã tạo prompt template mới #' . $newId . '.', ['data' => ['id' => $newId]]);
+                }
+                break;
+
+            case '/prompts/delete':
+                requirePermission('settings.edit');
+                $promptService = new PromptTemplateService();
+                $templateId = (int)($_POST['id'] ?? 0);
+                if ($templateId <= 0) throw new InvalidArgumentException('ID không hợp lệ.');
+                $promptService->delete($templateId);
+                json_response(true, 'Đã xóa prompt template #' . $templateId . '.');
+                break;
+
+            case '/prompts/activate':
+                requirePermission('settings.edit');
+                $promptService = new PromptTemplateService();
+                $templateId = (int)($_POST['id'] ?? 0);
+                if ($templateId <= 0) throw new InvalidArgumentException('ID không hợp lệ.');
+                $promptService->activate($templateId);
+                json_response(true, 'Đã kích hoạt prompt template #' . $templateId . '.');
+                break;
+
+            case '/prompts/preview':
+                requirePermission('settings.view');
+                $promptService = new PromptTemplateService();
+                $sampleProduct = [
+                    'product_name'    => 'Tai nghe Bluetooth Sony WH-1000XM5',
+                    'price'           => 6990000,
+                    'source_platform' => 'shopee',
+                    'affiliate_url'   => 'https://shope.ee/abc123',
+                    'sold_count'      => 1500,
+                    'notes'           => 'Chống ồn cao cấp, pin 30 giờ',
+                ];
+                $sampleContent = [
+                    'title'          => 'Tai nghe chống ồn đỉnh cao — Giảm giá sốc!',
+                    'body'           => 'Sony WH-1000XM5 là dòng tai nghe chống ồn hàng đầu thế giới. Thiết kế nhẹ, thoải mái đeo cả ngày. Pin trâu 30 giờ. Kết nối đa điểm.',
+                    'call_to_action' => 'Bấm link trong bài để mua ngay giá ưu đãi!',
+                    'hashtags'       => '#affiliate #tainghe #sony #shopee',
+                ];
+                $promptText = trim((string)($_POST['user_prompt'] ?? ''));
+                if ($promptText === '') throw new InvalidArgumentException('Prompt trống.');
+                $rendered = $promptService->render($promptText, $sampleProduct, $sampleContent);
+                json_response(true, 'Preview OK', ['data' => ['rendered' => $rendered]]);
                 break;
 
             // ── Scraper actions ──
@@ -1146,15 +1280,18 @@ switch ($path) {
         $offset = ($page - 1) * $perPage;
         $siteId = (int)currentSiteId();
         $pdo = db_pdo();
-        $totalStmt = $pdo->prepare('SELECT COUNT(*) FROM affiliate_products WHERE site_id = :site_id');
+
+        $totalStmt = $pdo->prepare('SELECT COUNT(*) FROM user_selected_products WHERE site_id = :site_id');
         $totalStmt->bindValue(':site_id', $siteId, PDO::PARAM_INT);
         $totalStmt->execute();
         $total = (int)$totalStmt->fetchColumn();
 
         $productsStmt = $pdo->prepare(
-            'SELECT * FROM affiliate_products
+            'SELECT id, site_id, source_platform, source_product_id, product_name, product_url, price,
+                    0 AS sold_count, status, notes, affiliate_url, content_status, created_at, updated_at
+             FROM user_selected_products
              WHERE site_id = :site_id
-             ORDER BY sold_count DESC, id DESC
+             ORDER BY created_at DESC, id DESC
              LIMIT :limit OFFSET :offset'
         );
         $productsStmt->bindValue(':site_id', $siteId, PDO::PARAM_INT);
@@ -1168,17 +1305,17 @@ switch ($path) {
             'SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN affiliate_url != "" THEN 1 ELSE 0 END) AS with_link,
-                SUM(CASE WHEN sold_count >= 50 THEN 1 ELSE 0 END) AS hot
-             FROM affiliate_products
+                SUM(CASE WHEN status = "active" THEN 1 ELSE 0 END) AS hot
+             FROM user_selected_products
              WHERE site_id = :site_id'
         );
         $summaryStmt->bindValue(':site_id', $siteId, PDO::PARAM_INT);
         $summaryStmt->execute();
         $summaryRow = $summaryStmt->fetch(PDO::FETCH_ASSOC) ?: [];
         $productSummary = [
-            'total' => (int)($summaryRow['total'] ?? $total),
+            'total'     => (int)($summaryRow['total'] ?? $total),
             'with_link' => (int)($summaryRow['with_link'] ?? 0),
-            'hot' => (int)($summaryRow['hot'] ?? 0),
+            'hot'       => (int)($summaryRow['hot'] ?? 0),
         ];
         render('products/index', [
             'pageTitle'      => 'Sản phẩm',
@@ -1197,7 +1334,7 @@ switch ($path) {
             'currentPage'    => 'contents',
             'contentSummary' => $contentService->summary(),
             'contents'       => $contentService->allContents(),
-            'products'       => $productSyncService->allProducts(),
+            'products'       => $userSelectedProductService->all(),
             'automationSettings' => $automationSettings,
         ]);
         break;
@@ -1232,20 +1369,51 @@ switch ($path) {
 
     case '/scraper':
         requirePermission('scraper.view');
-        // Keep the dedicated Shopee Chrome window available for intervention/scraping.
-        $scraperService->ensureShopeeLiveBrowser();
         $serverInfoSvc = new ServerInfoService();
+        $siteId = (int)currentSiteId();
+        $pdo = db_pdo();
+        $spPage = max(1, (int)($_GET['sp_page'] ?? 1));
+        $spPerPage = 25;
+        $spOffset = ($spPage - 1) * $spPerPage;
+
+        $spTotalStmt = $pdo->prepare('SELECT COUNT(*) FROM affiliate_products WHERE site_id = :sid');
+        $spTotalStmt->bindValue(':sid', $siteId, PDO::PARAM_INT);
+        $spTotalStmt->execute();
+        $spTotal = (int)$spTotalStmt->fetchColumn();
+
+        $spStmt = $pdo->prepare(
+            'SELECT ap.id, ap.product_name, ap.product_url, ap.source_platform, ap.price, ap.sold_count, ap.affiliate_url, ap.status, ap.source_product_id,
+                    usp.id as usp_id
+             FROM affiliate_products ap
+             LEFT JOIN user_selected_products usp ON ap.source_product_id = usp.source_product_id AND ap.source_platform = usp.source_platform AND ap.site_id = usp.site_id
+             WHERE ap.site_id = :sid
+             ORDER BY ap.sold_count DESC, ap.id DESC
+             LIMIT :lim OFFSET :off'
+        );
+        $spStmt->bindValue(':sid', $siteId, PDO::PARAM_INT);
+        $spStmt->bindValue(':lim', $spPerPage, PDO::PARAM_INT);
+        $spStmt->bindValue(':off', $spOffset, PDO::PARAM_INT);
+        $spStmt->execute();
+        $scrapedProducts = $spStmt->fetchAll(PDO::FETCH_ASSOC);
+
         render('scraper/index', [
             'pageTitle'       => 'Product Radar',
             'currentPage'     => 'scraper',
             'scraperSummary'  => $scraperService->summary(),
-            'shopeeSession'   => $scraperService->checkShopeeSession(),
+            'shopeeSession'   => ['alive' => null, 'loading' => true],
             'productSummary'  => $productSyncService->dashboardSummary(),
             'configs'         => $scraperService->allConfigs(),
             'categories'      => $scraperService->getCategories(),
             'topProducts'     => $productSyncService->topSellingProducts(10, 50),
-            'productRadar'    => $scraperService->buildProductRadar(12),
+            'productRadar'    => ['loading' => true, 'opportunities' => []],
             'serverInfo'      => $serverInfoSvc->get(),
+            'scrapedProducts' => $scrapedProducts,
+            'scrapedPagination' => [
+                'page'       => $spPage,
+                'perPage'    => $spPerPage,
+                'total'      => $spTotal,
+                'totalPages' => max(1, (int)ceil($spTotal / $spPerPage)),
+            ],
         ]);
         break;
 
@@ -1309,6 +1477,18 @@ switch ($path) {
             'integrationStatus' => $automationSettingsService->integrationStatus(),
             'integrationConfig' => $integrationConfigService->masked(),
             'topSellingProducts' => $productSyncService->topSellingProducts(10, 0),
+        ]);
+        break;
+
+    case '/prompts':
+        requirePermission('settings.view');
+        $promptService = new PromptTemplateService();
+        render('prompts/index', [
+            'pageTitle'    => 'Prompt Templates',
+            'currentPage'  => 'prompts',
+            'templates'    => $promptService->all(),
+            'templateKeys' => PromptTemplateService::availableKeys(),
+            'placeholders' => PromptTemplateService::availablePlaceholders(),
         ]);
         break;
 

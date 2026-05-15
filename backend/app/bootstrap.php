@@ -18,6 +18,7 @@ require_once __DIR__ . '/services/AutomationSettingsService.php';
 require_once __DIR__ . '/services/IntegrationConfigService.php';
 require_once __DIR__ . '/services/ProductSyncService.php';
 require_once __DIR__ . '/services/AffiliateLinkService.php';
+require_once __DIR__ . '/services/PromptTemplateService.php';
 require_once __DIR__ . '/services/OpenAIContentProvider.php';
 require_once __DIR__ . '/services/GeminiContentProvider.php';
 require_once __DIR__ . '/services/FacebookPagePublisher.php';

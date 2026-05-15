@@ -133,6 +133,10 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
                     <label class="form-label" style="font-size:12px">Link gốc *</label>
                     <input class="form-control" name="product_url" required placeholder="https://shopee.vn/..." style="font-size:14px;padding:8px 10px">
                 </div>
+                <div class="form-group" style="margin-bottom:10px">
+                    <label class="form-label" style="font-size:12px">Link Affiliate</label>
+                    <input class="form-control" name="affiliate_url" placeholder="https://s.shopee.vn/..." style="font-size:14px;padding:8px 10px">
+                </div>
                 <div class="grid-3 compact-grid" style="margin-bottom:10px">
                     <div class="form-group" style="margin-bottom:8px">
                         <label class="form-label" style="font-size:12px">Giá</label>
@@ -150,13 +154,17 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
                         </select>
                     </div>
                 </div>
+                <div class="form-group" style="margin-bottom:10px">
+                    <label class="form-label" style="font-size:12px">Ghi chú</label>
+                    <textarea class="form-control" name="notes" rows="2" placeholder="Thông tin thêm..." style="font-size:14px;padding:8px 10px"></textarea>
+                </div>
                 <button class="btn btn-accent" type="submit" style="width:100%;font-size:14px;padding:10px">Lưu sản phẩm</button>
             </form>
         </div>
 
         <div class="card publish-mode-card" style="padding:16px">
             <div class="section-heading" style="margin-bottom:12px">
-                <div class="card-title" style="font-size:13px">📥 Import Excel</div>
+                <div class="card-title" style="font-size:13px">📥 Import Excel / CSV</div>
             </div>
             <form data-ajax method="POST" action="<?= url('/products/import') ?>" enctype="multipart/form-data">
                 <div class="form-group" style="margin-bottom:10px">
@@ -172,7 +180,7 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
                 </div>
                 <button class="btn btn-success" type="submit" style="width:100%;font-size:14px;padding:10px">Import sản phẩm</button>
                 <div class="sub" style="margin-top:8px">
-                    <a href="<?= url('/templates/products-import-template.xlsx') ?>" download style="font-size:12px">📥 Tải file mẫu Excel</a>
+                    <a href="<?= url('/templates/products-import-template.csv') ?>" download style="font-size:12px">📥 Tải file mẫu (CSV)</a>
                 </div>
             </form>
         </div>
@@ -199,6 +207,7 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
                             <th style="width:70px">Nguồn</th>
                             <th style="width:90px">Giá</th>
                             <th style="width:80px">Đã bán</th>
+                            <th style="width:80px">Link Aff</th>
                             <th style="width:90px">Thao tác</th>
                         </tr>
                     </thead>
@@ -215,16 +224,32 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
                             <td><span class="badge badge-<?= e((string)$product['source_platform']) ?>" style="font-size:11px"><?= e((string)$product['source_platform']) ?></span></td>
                             <td class="text-sm"><?= (float)($product['price'] ?? 0) > 0 ? number_format((float)$product['price'], 0, ',', '.') . ' ₫' : '—' ?></td>
                             <td><span class="metric-pill <?= (int)($product['sold_count'] ?? 0) >= 1000 ? 'hot' : '' ?>" style="font-size:11px"><?= number_format((int)($product['sold_count'] ?? 0)) ?></span></td>
+                            <td style="font-size:11px">
+                                <?php if (!empty($product['affiliate_url'])): ?>
+                                    <span style="color:#22c55e" title="<?= e($product['affiliate_url']) ?>">✓ Có</span>
+                                <?php else: ?>
+                                    <span style="color:var(--text-muted)">—</span>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <button
                                     type="button"
-                                    class="btn btn-ghost btn-sm"
+                                    class="btn <?= empty($product['affiliate_url']) ? 'btn-accent' : 'btn-ghost' ?> btn-sm"
                                     data-select-product-trigger
                                     data-product-id="<?= (int)$product['id'] ?>"
                                     data-product-name="<?= e((string)$product['product_name']) ?>"
                                     data-product-url="<?= e((string)($product['product_url'] ?? '')) ?>"
+                                    data-affiliate-url="<?= e((string)($product['affiliate_url'] ?? '')) ?>"
+                                    data-status="<?= e((string)($product['status'] ?? 'pending')) ?>"
+                                    data-notes="<?= e((string)($product['notes'] ?? '')) ?>"
                                     style="font-size:11px;padding:4px 8px"
-                                >+ Chọn</button>
+                                >
+                                    <?php if (empty($product['affiliate_url'])): ?>
+                                        + Thêm link
+                                    <?php else: ?>
+                                        <i class="fas fa-edit"></i> Sửa
+                                    <?php endif; ?>
+                                </button>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -255,7 +280,7 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
         <div class="modal-box" style="max-width:560px;">
             <h3>Thêm vào My Products</h3>
             <p class="sub" style="margin-bottom:16px;">Thêm link affiliate và cập nhật thông tin sản phẩm.</p>
-            <form method="POST" action="<?= url('/products/select') ?>">
+            <form data-ajax method="POST" action="<?= url('/products/select') ?>">
                 <input type="hidden" name="product_id" id="select_product_id">
                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                 <div class="form-group" style="margin-bottom:12px;">

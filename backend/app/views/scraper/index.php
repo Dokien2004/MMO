@@ -76,7 +76,13 @@ for ($i = 0; $i < count($priceDataK); $i++) { $scatterData[] = ['x' => $priceDat
     <div class="stat-card accent"><div class="label">SP đã cào</div><div class="value"><?= number_format((int)($productSummary['total'] ?? 0)) ?></div></div>
     <div class="stat-card success"><div class="label">Cào từ scraper</div><div class="value"><?= number_format((int)($scraperSummary['total_scraped'] ?? 0)) ?></div></div>
     <div class="stat-card"><div class="label">Cấu hình</div><div class="value"><?= count($configs) ?></div></div>
-    <div class="stat-card purple"><div class="label">Radar items</div><div class="value"><?= (int)($radar['count'] ?? 0) ?></div></div>
+    <div class="stat-card purple"><div class="label">Radar items</div><div class="value" id="stat-radar-count">—</div></div>
+</div>
+
+<!-- Session status badge (async) -->
+<div id="session-status-bar" style="margin-bottom:14px;padding:10px 14px;border-radius:8px;background:var(--bg-elevated);border:1px solid var(--border);font-size:13px;display:flex;align-items:center;gap:10px">
+    <span id="session-dot" style="width:10px;height:10px;border-radius:50%;background:#94a3b8;display:inline-block"></span>
+    <span id="session-msg" style="color:var(--text-sec)">Đang kiểm tra kết nối Chrome Shopee...</span>
 </div>
 
 <!-- Charts -->
@@ -92,28 +98,13 @@ for ($i = 0; $i < count($priceDataK); $i++) { $scatterData[] = ['x' => $priceDat
     </div>
 </div>
 
-<!-- Radar results -->
-<?php if (!empty($radar['opportunities'])): ?>
-<div class="card" style="margin-bottom:20px">
-    <div class="card-title" style="font-size:15px">Kết quả phân tích Radar</div>
-    <div class="table-wrap">
-        <table class="table-main table-compact">
-            <thead><tr><th style="width:50px">Điểm</th><th>Sản phẩm</th><th>Nhu cầu</th><th>Góc content</th></tr></thead>
-            <tbody>
-            <?php foreach (array_slice($radar['opportunities'], 0, 5) as $item): ?>
-                <?php $score = (int)($item['score'] ?? 0); $c = $score >= 75 ? '#22c55e' : ($score >= 55 ? '#f59e0b' : '#ef4444'); ?>
-                <tr>
-                    <td><span class="metric-pill" style="background:<?= $c ?>20;color:<?= $c ?>;font-weight:700"><?= $score ?></span></td>
-                    <td><strong class="text-sm"><?= e(mb_substr($item['name'] ?? '', 0, 40)) ?></strong></td>
-                    <td class="text-sm"><?= e($item['demand'] ?? '') ?></td>
-                    <td class="text-sm"><?= e(mb_substr($item['content_angle'] ?? '', 0, 35)) ?></td>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
+<!-- Radar results (async) -->
+<div id="radar-results-wrap" class="card" style="margin-bottom:20px">
+    <div class="card-title" style="font-size:15px">Kết quả phân tích Radar <span id="radar-loading-badge" class="badge" style="font-size:11px;margin-left:8px">⏳ Đang tải...</span></div>
+    <div id="radar-results-body" style="padding:20px 0;text-align:center;color:var(--text-muted);font-size:13px">
+        Đang tải dữ liệu Radar, vui lòng chờ...
     </div>
 </div>
-<?php endif; ?>
 
 <!-- Hot categories -->
 <div class="card" id="hot-cats" style="margin-bottom:20px">
@@ -214,7 +205,96 @@ for ($i = 0; $i < count($priceDataK); $i++) { $scatterData[] = ['x' => $priceDat
     </form>
 </div>
 
+<!-- ── Danh sách sản phẩm đã cào (affiliate_products) ── -->
+<?php
+$scrapedProducts = $scrapedProducts ?? [];
+$spPagination = $scrapedPagination ?? ['page' => 1, 'totalPages' => 1, 'total' => 0];
+$csrfToken = csrf_token();
+?>
+<div class="card" id="scraped-list" style="margin-bottom:20px">
+    <div class="section-heading" style="margin-bottom:14px">
+        <div>
+            <div class="card-title">🗂️ Kho sản phẩm đã cào (<?= number_format((int)$spPagination['total']) ?> SP)</div>
+            <div class="sub" style="font-size:12px">Chọn để chuyển sang My Products và thêm link affiliate</div>
+        </div>
+    </div>
+
+    <?php if (empty($scrapedProducts)): ?>
+        <div class="empty-state"><p>Chưa có sản phẩm nào. Chạy scraper để cào dữ liệu.</p></div>
+    <?php else: ?>
+    <div class="table-wrap">
+        <table class="table-main table-compact" id="scraped-products-table">
+            <thead>
+                <tr>
+                    <th>Sản phẩm</th>
+                    <th style="width:70px">Nguồn</th>
+                    <th style="width:95px">Giá</th>
+                    <th style="width:75px">Đã bán</th>
+                    <th style="width:80px">Link Aff</th>
+                    <th style="width:80px">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($scrapedProducts as $sp): ?>
+                <tr id="scraped-row-<?= (int)$sp['id'] ?>">
+                    <td>
+                        <strong style="font-size:13px"><?= e(mb_substr($sp['product_name'], 0, 55)) ?></strong>
+                        <?php if (!empty($sp['product_url'])): ?>
+                            <a href="<?= e($sp['product_url']) ?>" target="_blank" rel="noreferrer" style="font-size:11px;color:var(--accent);display:block;margin-top:2px">Mở ↗</a>
+                        <?php endif; ?>
+                    </td>
+                    <td><span class="badge badge-<?= e($sp['source_platform']) ?>" style="font-size:11px"><?= e($sp['source_platform']) ?></span></td>
+                    <td class="text-sm"><?= (float)($sp['price'] ?? 0) > 0 ? number_format((float)$sp['price'], 0, ',', '.') . ' ₫' : '—' ?></td>
+                    <td><span class="metric-pill <?= (int)($sp['sold_count'] ?? 0) >= 1000 ? 'hot' : '' ?>" style="font-size:11px"><?= number_format((int)($sp['sold_count'] ?? 0)) ?></span></td>
+                    <td style="font-size:11px"><?= !empty($sp['affiliate_url']) ? '<span style="color:#22c55e">✓ Có</span>' : '<span style="color:var(--text-muted)">—</span>' ?></td>
+                    <td>
+                        <?php if (!empty($sp['usp_id'])): ?>
+                            <button
+                                type="button"
+                                class="btn btn-success btn-sm"
+                                disabled
+                                style="font-size:11px;padding:4px 10px;display:block;width:100%;opacity:0.7;cursor:default"
+                            >✓ Đã chọn</button>
+                        <?php else: ?>
+                            <button
+                                type="button"
+                                class="btn btn-accent btn-sm btn-select-scraped"
+                                data-id="<?= (int)$sp['id'] ?>"
+                                data-name="<?= e(mb_substr($sp['product_name'], 0, 50)) ?>"
+                                style="font-size:11px;padding:4px 10px;display:block;width:100%"
+                            >+ Chọn</button>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+
+    <?php if ($spPagination['totalPages'] > 1): ?>
+    <div style="display:flex;justify-content:center;gap:6px;margin-top:14px;flex-wrap:wrap">
+        <?php if ($spPagination['page'] > 1): ?>
+            <a class="btn btn-ghost btn-sm" href="<?= url('/scraper?sp_page=' . ($spPagination['page'] - 1) . '#scraped-list') ?>">← Trang trước</a>
+        <?php endif; ?>
+        <?php for ($pg = max(1, $spPagination['page'] - 2); $pg <= min($spPagination['totalPages'], $spPagination['page'] + 2); $pg++): ?>
+            <?php if ($pg == $spPagination['page']): ?>
+                <span class="btn btn-accent btn-sm"><?= $pg ?></span>
+            <?php else: ?>
+                <a class="btn btn-ghost btn-sm" href="<?= url('/scraper?sp_page=' . $pg . '#scraped-list') ?>"><?= $pg ?></a>
+            <?php endif; ?>
+        <?php endfor; ?>
+        <?php if ($spPagination['page'] < $spPagination['totalPages']): ?>
+            <a class="btn btn-ghost btn-sm" href="<?= url('/scraper?sp_page=' . ($spPagination['page'] + 1) . '#scraped-list') ?>">Trang sau →</a>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+    <?php endif; ?>
+</div>
+
 <script>
+const BASE_URL = '<?= rtrim(url(''), '/') ?>';
+const CSRF_TOKEN = '<?= e($csrfToken) ?>';
+
 document.addEventListener('DOMContentLoaded', function() {
     Chart.defaults.font.family = 'inherit';
     Chart.defaults.color = '#94a3b8';
@@ -238,6 +318,111 @@ document.addEventListener('DOMContentLoaded', function() {
         data: { datasets: [{ label: 'Sản phẩm', data: scatterData, backgroundColor: 'rgba(139,92,246,0.7)', pointRadius: 6 }] },
         options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { var d=ctx.raw; return ' Giá: '+Math.round(d[0]*1000).toLocaleString()+'d | Ban: '+d[1].toLocaleString(); } } } }, scales: { x: { title: { display: true, text: 'Giá (K VND)' }, grid: { color: 'rgba(148,163,184,0.1)' } }, y: { title: { display: true, text: 'Lượt bán' }, grid: { color: 'rgba(148,163,184,0.1)' } } } }
     });
+
+    // ── Async: kiểm tra trạng thái session Chrome Shopee ──
+    fetch(BASE_URL + '/api/scraper/status')
+        .then(r => r.json())
+        .then(res => {
+            const dot = document.getElementById('session-dot');
+            const msg = document.getElementById('session-msg');
+            if (!res.success) {
+                dot.style.background = '#ef4444';
+                msg.textContent = 'Lỗi kiểm tra Chrome: ' + (res.message || 'Unknown');
+                return;
+            }
+            const d = res.data || {};
+            if (d.alive) {
+                dot.style.background = d.captcha_required ? '#f59e0b' : '#22c55e';
+                msg.textContent = d.message || 'Chrome đang chạy';
+            } else {
+                dot.style.background = '#94a3b8';
+                msg.textContent = d.message || 'Không tìm thấy Chrome — scraper sẽ tự mở khi cào.';
+            }
+        })
+        .catch(() => {
+            document.getElementById('session-msg').textContent = 'Không lấy được trạng thái Chrome.';
+        });
+
+    // ── Async: tải dữ liệu Radar ──
+    fetch(BASE_URL + '/api/scraper/radar?limit=12')
+        .then(r => r.json())
+        .then(res => {
+            const badge = document.getElementById('radar-loading-badge');
+            const body  = document.getElementById('radar-results-body');
+            const stat  = document.getElementById('stat-radar-count');
+            if (!res.success || !res.data) {
+                badge.textContent = '⚠️ Lỗi';
+                body.innerHTML = '<p style="color:#ef4444;padding:12px">' + (res.message || 'Lỗi tải Radar.') + '</p>';
+                return;
+            }
+            const radar = res.data;
+            stat.textContent = radar.count || 0;
+            badge.textContent = '✅ ' + (radar.count || 0) + ' cơ hội';
+            if (!radar.opportunities || !radar.opportunities.length) {
+                body.innerHTML = '<p style="padding:12px;color:var(--text-muted)">Chưa có dữ liệu phân tích. Cào thêm sản phẩm và chạy lại.</p>';
+                return;
+            }
+            const rows = radar.opportunities.slice(0, 8).map(item => {
+                const score = item.score || 0;
+                const color = score >= 75 ? '#22c55e' : (score >= 55 ? '#f59e0b' : '#ef4444');
+                return `<tr>
+                    <td><span class="metric-pill" style="background:${color}20;color:${color};font-weight:700">${score}</span></td>
+                    <td><strong class="text-sm">${escHtml(item.name || '').slice(0, 45)}</strong></td>
+                    <td class="text-sm">${escHtml(item.demand || '')}</td>
+                    <td class="text-sm">${escHtml((item.content_angle || '').slice(0, 35))}</td>
+                </tr>`;
+            }).join('');
+            body.innerHTML = `<div class="table-wrap"><table class="table-main table-compact">
+                <thead><tr><th style="width:55px">Điểm</th><th>Sản phẩm</th><th>Nhu cầu</th><th>Góc content</th></tr></thead>
+                <tbody>${rows}</tbody></table></div>`;
+        })
+        .catch(err => {
+            document.getElementById('radar-loading-badge').textContent = '⚠️ Lỗi';
+            document.getElementById('radar-results-body').innerHTML = '<p style="color:#ef4444;padding:12px">Không tải được Radar.</p>';
+        });
+
+    // ── Chọn sản phẩm đã cào → My Products ──
+    document.querySelectorAll('.btn-select-scraped').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const id   = btn.dataset.id;
+            const name = btn.dataset.name;
+            btn.disabled = true;
+            btn.textContent = '...';
+
+            const fd = new FormData();
+            fd.append('product_id', id);
+            fd.append('csrf_token', CSRF_TOKEN);
+
+            fetch(BASE_URL + '/products/select-scraped', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success) {
+                        const parent = btn.parentNode;
+                        parent.innerHTML = `
+                            <button
+                                type="button"
+                                class="btn btn-success btn-sm"
+                                disabled
+                                style="font-size:11px;padding:4px 10px;display:block;width:100%;opacity:0.7;cursor:default"
+                            >✓ Đã chọn</button>
+                        `;
+                    } else {
+                        btn.disabled = false;
+                        btn.textContent = '+ Chọn';
+                        alert('Lỗi: ' + (res.message || 'Không xác định'));
+                    }
+                })
+                .catch(() => {
+                    btn.disabled = false;
+                    btn.textContent = '+ Chọn';
+                    alert('Lỗi kết nối, vui lòng thử lại.');
+                });
+        });
+    });
+
+    function escHtml(str) {
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
 });
 </script>
 

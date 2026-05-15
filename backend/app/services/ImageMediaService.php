@@ -501,6 +501,13 @@ final class ImageMediaService
 
     private function fallbackPrompt(array $content): string
     {
+        $promptService = new PromptTemplateService();
+        $rendered = $promptService->renderForProduct('image_fallback', [], $content);
+        if ($rendered !== null) {
+            return $rendered;
+        }
+
+        // Fallback hardcode khi chưa có template trong DB
         return implode(' ', [
             'Ảnh quảng cáo affiliate vuông 1:1, phong cách hiện đại, sạch, phù hợp đăng Facebook.',
             'Chủ đề nội dung: ' . (string)($content['title'] ?? 'Sản phẩm affiliate'),

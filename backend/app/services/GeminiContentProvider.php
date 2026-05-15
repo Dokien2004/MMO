@@ -15,12 +15,16 @@ final class GeminiContentProvider
             throw new RuntimeException('GEMINI_API_KEY chua duoc cau hinh.');
         }
 
+        $promptService = new PromptTemplateService();
+        $userMsg = $promptService->renderForProduct('content_text', $product)
+            ?? $this->buildPrompt($product);
+
         $payload = [
             'contents' => [
                 [
                     'role' => 'user',
                     'parts' => [
-                        ['text' => $this->buildPrompt($product)],
+                        ['text' => $userMsg],
                     ],
                 ],
             ],

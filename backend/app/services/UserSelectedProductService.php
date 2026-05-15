@@ -55,22 +55,28 @@ class UserSelectedProductService
         $existing = $sourceProductId ? $this->findBySourceProductId($sourceProductId, $platform) : null;
 
         $now = date('Y-m-d H:i:s');
+        $validStatuses = ['pending', 'active', 'content_generated', 'published', 'paused', 'archived'];
+        $status = trim((string)($data['status'] ?? 'pending'));
+        if (!in_array($status, $validStatuses, true)) {
+            $status = 'pending';
+        }
+
         $fields = [
-            'site_id' => $siteId,
-            'user_id' => (int)($data['user_id'] ?? 0),
+            'site_id'           => $siteId,
+            'user_id'           => (int)($data['user_id'] ?? 0),
             'source_product_id' => $sourceProductId,
-            'product_name' => trim((string)($data['product_name'] ?? '')),
-            'product_url' => trim((string)($data['product_url'] ?? '')),
-            'affiliate_url' => trim((string)($data['affiliate_url'] ?? '')),
-            'source_platform' => $platform,
-            'price' => (float)($data['price'] ?? 0),
-            'commission_rate' => trim((string)($data['commission_rate'] ?? '')),
-            'ai_score' => (float)($data['ai_score'] ?? 0),
-            'status' => trim((string)($data['status'] ?? 'pending')),
-            'content_status' => trim((string)($data['content_status'] ?? 'none')),
-            'notes' => trim((string)($data['notes'] ?? '')),
-            'product_images' => trim((string)($data['product_images'] ?? '')),
-            'updated_at' => $now,
+            'product_name'      => trim((string)($data['product_name'] ?? '')),
+            'product_url'       => trim((string)($data['product_url'] ?? '')),
+            'affiliate_url'     => trim((string)($data['affiliate_url'] ?? '')),
+            'source_platform'   => $platform,
+            'price'             => (float)($data['price'] ?? 0),
+            'commission_rate'   => (float)($data['commission_rate'] ?? 0),   // DECIMAL — never empty string
+            'ai_score'          => (float)($data['ai_score'] ?? 0),
+            'status'            => $status,
+            'content_status'    => trim((string)($data['content_status'] ?? 'none')) ?: 'none',
+            'notes'             => ($notesVal = trim((string)($data['notes'] ?? ''))) !== '' ? $notesVal : null,
+            'product_images'    => ($imgVal = trim((string)($data['product_images'] ?? ''))) !== '' ? $imgVal : null,
+            'updated_at'        => $now,
         ];
         $fields['created_at'] = ($existing['created_at'] ?? $now);
 

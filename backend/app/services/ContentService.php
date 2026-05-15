@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/DatabaseStorage.php';
-require_once __DIR__ . '/ProductSyncService.php';
+require_once __DIR__ . '/UserSelectedProductService.php';
 require_once __DIR__ . '/AffiliateLinkService.php';
 require_once __DIR__ . '/TaskLogService.php';
 require_once __DIR__ . '/OpenAIContentProvider.php';
@@ -12,7 +12,7 @@ require_once __DIR__ . '/GeminiContentProvider.php';
 final class ContentService
 {
     private DatabaseStorage $storage;
-    private ProductSyncService $productSyncService;
+    private UserSelectedProductService $userSelectedProductService;
     private AffiliateLinkService $affiliateLinkService;
     private TaskLogService $taskLogService;
     private OpenAIContentProvider $openAIProvider;
@@ -24,7 +24,7 @@ final class ContentService
     {
         $this->pdo = db_pdo();
         $this->storage = new DatabaseStorage();
-        $this->productSyncService = new ProductSyncService();
+        $this->userSelectedProductService = new UserSelectedProductService();
         $this->affiliateLinkService = new AffiliateLinkService();
         $this->taskLogService = new TaskLogService();
         $this->openAIProvider = new OpenAIContentProvider();
@@ -33,7 +33,7 @@ final class ContentService
 
     public function generateDraftForProduct(int $productId, string $provider = 'template_engine'): array
     {
-        $product = $this->productSyncService->findProductById($productId);
+        $product = $this->userSelectedProductService->findById($productId);
         if ($product === null) {
             throw new InvalidArgumentException('Khong tim thay san pham de sinh noi dung.');
         }
@@ -53,10 +53,9 @@ final class ContentService
             ];
         });
 
-        $this->productSyncService->updateProduct($productId, [
-            'status' => 'content_ready',
-            'content_status' => 'draft',
-        ]);
+        $product['status'] = 'content_ready';
+        $product['content_status'] = 'draft';
+        $this->userSelectedProductService->upsert($product);
 
         $this->taskLogService->create('generate_content_draft', 'success', [
             'product_id' => $productId,
@@ -87,11 +86,12 @@ final class ContentService
 
     public function generateForEligibleProducts(int $limit = 10, string $provider = 'template_engine'): array
     {
-        $products = $this->productSyncService->allProducts();
+        $products = $this->userSelectedProductService->all();
         $generated = [];
 
         foreach ($products as $product) {
-            if (($product['status'] ?? '') !== 'linked' || empty($product['affiliate_url'] ?? '')) {
+            $status = $product['status'] ?? '';
+            if (!in_array($status, ['pending', 'active'], true) || empty($product['affiliate_url'] ?? '')) {
                 continue;
             }
 
@@ -311,6 +311,13 @@ final class ContentService
 
     private function buildMediaPrompt(array $product, array $providerPayload): string
     {
+        $promptService = new PromptTemplateService();
+        $rendered = $promptService->renderForProduct('image', $product, $providerPayload);
+        if ($rendered !== null) {
+            return $rendered;
+        }
+
+        // Fallback hardcode khi chưa có template trong DB
         $price = number_format((float)($product['price'] ?? 0), 0, ',', '.');
         return implode(' ', [
             'Ảnh quảng cáo affiliate vuông 1:1, phong cách hiện đại, sạch, phù hợp đăng Facebook.',
@@ -381,15 +388,20 @@ final class ContentService
 
     private function syncProductContentState(int $productId, string $contentStatus): void
     {
-        $changes = ['content_status' => $contentStatus];
-        if ($contentStatus === 'approved') {
-            $changes['status'] = 'content_ready';
-        } elseif ($contentStatus === 'rejected') {
-            $changes['status'] = 'linked';
-        } elseif ($contentStatus === 'used') {
-            $changes['status'] = 'posted';
+        $product = $this->userSelectedProductService->findById($productId);
+        if (!$product) {
+            return;
         }
-        $this->productSyncService->updateProduct($productId, $changes);
+
+        $product['content_status'] = $contentStatus;
+        if ($contentStatus === 'approved') {
+            $product['status'] = 'content_ready';
+        } elseif ($contentStatus === 'rejected') {
+            $product['status'] = 'active'; // or 'pending' depending on logic, earlier was 'linked'
+        } elseif ($contentStatus === 'used') {
+            $product['status'] = 'published'; // earlier was 'posted'
+        }
+        $this->userSelectedProductService->upsert($product);
     }
 
     private function findByProductId(int $productId): ?array

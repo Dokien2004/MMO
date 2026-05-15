@@ -26,6 +26,12 @@ final class OpenAIContentProvider
             throw new RuntimeException('OPENAI_API_KEY chua duoc cau hinh.');
         }
 
+        $promptService = new PromptTemplateService();
+        $systemMsg = $promptService->systemPromptFor('content_text')
+            ?? 'Ban la copywriter affiliate. Luon tra ve JSON hop le voi cac key: title, body, hashtags, call_to_action.';
+        $userMsg = $promptService->renderForProduct('content_text', $product)
+            ?? $this->buildPrompt($product);
+
         $payload = [
             'model' => $this->model(),
             'temperature' => 0.8,
@@ -33,11 +39,11 @@ final class OpenAIContentProvider
             'messages' => [
                 [
                     'role' => 'system',
-                    'content' => 'Ban la copywriter affiliate. Luon tra ve JSON hop le voi cac key: title, body, hashtags, call_to_action.'
+                    'content' => $systemMsg,
                 ],
                 [
                     'role' => 'user',
-                    'content' => $this->buildPrompt($product),
+                    'content' => $userMsg,
                 ],
             ],
         ];

@@ -40,6 +40,7 @@
         $systemModules = [
             'CHANNELS' => ['url' => '/channels', 'page' => 'channels', 'label' => 'Quản lý kênh', 'svg' => '<svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>'],
             'SETTINGS' => ['url' => '/settings', 'page' => 'settings', 'label' => 'Tự động hóa', 'svg' => '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.33 1V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1-.6 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1-.33H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0 .6-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .33-1V3a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1 .6 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.36.3.57.72.6 1.19V10a1.65 1.65 0 0 0 1 .33H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51.67z"/></svg>'],
+            'PROMPTS'  => ['url' => '/prompts',  'page' => 'prompts',  'label' => 'Prompt AI', 'svg' => '<svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>'],
             'LOGS'     => ['url' => '/logs',     'page' => 'logs',     'label' => 'Nhật ký',     'svg' => '<svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>'],
             'SERVER_INFO' => ['url' => '/server-info', 'page' => 'server_info', 'label' => 'Server Info', 'svg' => '<svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'],
         ];
@@ -62,7 +63,7 @@
         <div class="nav-section">
             <div class="nav-section-title">Hệ thống</div>
             <?php foreach ($systemModules as $modCode => $m): ?>
-                <?php if (in_array($modCode, $enabledModules)): ?>
+                <?php if ($modCode === 'PROMPTS' || in_array($modCode, $enabledModules)): ?>
                     <a href="<?= url($m['url']) ?>" class="nav-item <?= $currentPage === $m['page'] ? 'active' : '' ?>">
                         <?= $m['svg'] ?>
                         <?= e($m['label']) ?>

@@ -391,6 +391,13 @@ final class VideoMediaService
 
     private function buildVideoPrompt(array $content, array $product = []): string
     {
+        $promptService = new PromptTemplateService();
+        $rendered = $promptService->renderForProduct('video', $product, $content);
+        if ($rendered !== null) {
+            return $rendered;
+        }
+
+        // Fallback hardcode khi chưa có template trong DB
         $productName = trim((string)($product['product_name'] ?? $content['title'] ?? 'sản phẩm'));
         $price = (float)($product['price'] ?? 0);
         $sold = (int)($product['sold_count'] ?? 0);

@@ -32,9 +32,9 @@
                 selectProductId.value = button.getAttribute('data-product-id') || '';
                 productName.value = button.getAttribute('data-product-name') || '';
                 productUrl.value = button.getAttribute('data-product-url') || '';
-                affiliateUrl.value = '';
-                status.value = 'pending';
-                notes.value = '';
+                affiliateUrl.value = button.getAttribute('data-affiliate-url') || '';
+                status.value = button.getAttribute('data-status') || 'pending';
+                notes.value = button.getAttribute('data-notes') || '';
                 openModal();
             });
         });

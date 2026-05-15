@@ -219,15 +219,20 @@ function site_integration_config_value(string $key, string $default = ''): strin
 
     try {
         $pdo = db_pdo();
-        $pdo->exec("CREATE TABLE IF NOT EXISTS site_integration_configs (
-            site_id INT UNSIGNED NOT NULL,
-            config_key VARCHAR(100) NOT NULL,
-            config_value TEXT NULL,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (site_id, config_key),
-            KEY idx_site_integration_configs_key (config_key)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        
+        static $schemaChecked = false;
+        if (!$schemaChecked) {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS site_integration_configs (
+                site_id INT UNSIGNED NOT NULL,
+                config_key VARCHAR(100) NOT NULL,
+                config_value TEXT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (site_id, config_key),
+                KEY idx_site_integration_configs_key (config_key)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $schemaChecked = true;
+        }
         $stmt = $pdo->prepare('SELECT config_value FROM site_integration_configs WHERE site_id = :site_id AND config_key = :config_key LIMIT 1');
         $stmt->execute([':site_id' => $siteId, ':config_key' => $key]);
         $value = $stmt->fetchColumn();
