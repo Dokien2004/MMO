@@ -519,7 +519,7 @@ tr:hover td { background: var(--table-hover); }
 td strong { color: var(--text); font-weight: 500; }
 td .sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 td .mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; word-break: break-all; color: var(--text-muted); }
-.table-main { min-width: 880px; }
+.table-main { min-width: 100%; }
 .table-compact th { padding: 10px 12px; }
 .table-compact td { padding: 12px; }
 .item-title {
@@ -926,14 +926,17 @@ select.form-control { cursor: pointer; }
     .pipeline-arrow { width: 24px; }
 
     /* Tables: card-style on mobile */
-    table { font-size: 12px; }
-    th { font-size: 10px; padding: 10px 10px; }
-    td { padding: 10px 10px; }
-    .table-wrap { border-radius: 8px; margin-left: -2px; margin-right: -2px; }
-    .mono { font-size: 10px; }
-    .truncate { max-width: 140px; }
-    .copyable-link { max-width: 260px; }
-    .media-thumb { max-width: 130px; }
+    table, thead, tbody, th, td, tr { display: block; width: 100%; }
+    thead { display: none; }
+    tr { margin-bottom: 16px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden; }
+    td { padding: 12px 14px !important; text-align: left !important; border-bottom: 1px solid var(--border); min-width: 0 !important; }
+    td:last-child { border-bottom: none; }
+    .table-wrap { border: none; background: transparent; padding: 0; margin: 0; overflow-x: visible; }
+    .product-info-cell, .post-content-cell { min-width: 0 !important; }
+    .mono { font-size: 11px; }
+    .truncate { max-width: 100%; white-space: normal; }
+    .copyable-link { max-width: 100%; }
+    .media-thumb, .media-thumb-sm { max-width: 100%; height: auto; }
 
     /* Buttons */
     .btn { padding: 8px 12px; font-size: 11px; }
@@ -1015,7 +1018,7 @@ select.form-control { cursor: pointer; }
     font-size: 12px;
 }
 .mini-stats strong { color: var(--text); }
-.products-table { min-width: 1040px; }
+.products-table { min-width: 100%; }
 .product-info-cell { min-width: 320px; }
 .product-price { color: var(--text); font-weight: 700; white-space: nowrap; }
 .affiliate-ready {
@@ -1055,7 +1058,7 @@ select.form-control { cursor: pointer; }
 .publish-mode-card.ready { border-color: rgba(16,185,129,0.28); }
 .publish-mode-card.blocked { border-color: rgba(245,158,11,0.22); }
 .compact-status { gap: 4px; margin-bottom: 8px; }
-.posts-table { min-width: 1080px; }
+.posts-table { min-width: 100%; }
 .post-content-cell { min-width: 360px; }
 .post-preview-text {
     margin-top: 8px;

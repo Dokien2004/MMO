@@ -71,53 +71,7 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
         <a class="btn btn-success" href="<?= url('/contents') ?>">✍️ Tạo Content</a>
     </div>
 
-    <div class="two-col-section">
-        <div class="card radar-card-grid" style="margin-bottom:0">
-            <div class="card-title" style="font-size:14px;margin-bottom:12px">🎯 Cần tạo link — tiềm năng cao</div>
-            <?php if (empty($topRadarEligible)): ?>
-                <p class="text-sm text-muted" style="padding:12px 0">Không có sản phẩm nào cần tạo link ngay. Chạy Product Radar để gom thêm tín hiệu.</p>
-            <?php else: ?>
-                <?php foreach ($topRadarEligible as $p): ?>
-                    <div style="padding:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated)">
-                        <div style="font-weight:600;font-size:13px;margin-bottom:4px"><?= e((string)$p['product_name']) ?></div>
-                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-                            <span class="badge badge-<?= e((string)$p['source_platform']) ?>" style="font-size:11px"><?= e((string)$p['source_platform']) ?></span>
-                            <span class="metric-pill hot" style="font-size:11px"><?= number_format((int)($p['sold_count'] ?? 0)) ?> đã bán</span>
-                            <?php if ((float)($p['price'] ?? 0) > 0): ?>
-                                <span class="text-sm" style="color:var(--text-sec)"><?= number_format((float)$p['price'], 0, ',', '.') ?> ₫</span>
-                            <?php endif; ?>
-                        </div>
-                        <a href="<?= url('/links?product_id=' . (int)$p['id']) ?>" class="btn btn-sm btn-accent" style="font-size:12px;padding:5px 12px">Tạo link →</a>
-                    </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </div>
 
-        <div class="card top-sold-card" style="margin-bottom:0">
-            <div class="card-title" style="font-size:14px;margin-bottom:12px">🏆 Bán chạy nhất</div>
-            <?php if (empty($topProducts)): ?>
-                <p class="text-sm text-muted" style="padding:12px 0">Chưa có dữ liệu.</p>
-            <?php else: ?>
-                <?php $rank = 1; foreach ($topProducts as $p): ?>
-                    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
-                        <span style="width:24px;text-align:center;font-size:13px;color:var(--text-muted);flex-shrink:0"><?= $rank++ ?></span>
-                        <div style="flex:1;min-width:0">
-                            <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><?= e((string)$p['product_name']) ?></div>
-                            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
-                                <?php if ((float)($p['price'] ?? 0) > 0): ?>
-                                    <span class="text-sm" style="color:var(--text-sec)"><?= number_format((float)$p['price'], 0, ',', '.') ?> ₫</span>
-                                <?php endif; ?>
-                                <span class="metric-pill hot" style="font-size:11px"><?= number_format((int)($p['sold_count'] ?? 0)) ?> đã bán</span>
-                            </div>
-                        </div>
-                        <?php if (!empty($p['product_url'])): ?>
-                            <a href="<?= e((string)$p['product_url']) ?>" target="_blank" rel="noreferrer" class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:12px">↗</a>
-                        <?php endif; ?>
-                    </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </div>
-    </div>
 
     <div class="publish-mode-grid" style="margin-bottom:20px">
         <div class="card publish-mode-card ready" style="padding:16px">
