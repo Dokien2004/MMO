@@ -75,6 +75,7 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
         <a class="btn btn-success" href="<?= url('/contents') ?>">✍️ Tạo Content</a>
     </div>
 
+<<<<<<< HEAD
     <div class="two-col-section">
         <div class="card radar-card-grid" style="margin-bottom:0">
             <div class="card-title" style="font-size:14px;margin-bottom:12px">🎯 Cần tạo link — tiềm năng cao</div>
@@ -122,6 +123,9 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
             <?php endif; ?>
         </div>
     </div>
+=======
+
+>>>>>>> 9ec4823acff1517e52485279bce0434d00507fc9
 
     <div class="publish-mode-grid" style="margin-bottom:20px">
         <div class="card publish-mode-card ready" style="padding:16px">
