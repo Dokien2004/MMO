@@ -628,6 +628,9 @@ $postPermissionMap = [
     '/admin/sites/update'    => 'admin.sites',
     '/admin/sites/toggle'    => 'admin.sites',
     '/admin/sites/change-current' => 'admin.sites',
+    '/admin/telegram/save'   => 'admin.sites',
+    '/admin/telegram/fetch-chat-id' => 'admin.sites',
+    '/admin/telegram/test'   => 'admin.sites',
     '/my-products/add'            => 'products.view',
     '/my-products/pick'           => 'products.view',
     '/my-products/generate-content' => 'products.view',
@@ -1214,6 +1217,113 @@ if ($method === 'POST') {
                 json_response(true, 'Đã chuyển sang site ' . $site['code'] . '.');
                 break;
 
+            case '/admin/telegram/save':
+                $botToken = trim((string)($_POST['TELEGRAM_BOT_TOKEN'] ?? ''));
+                $chatId = trim((string)($_POST['TELEGRAM_CHAT_ID'] ?? ''));
+                $pdo = db_pdo();
+                if ($botToken !== '') {
+                    $stmt = $pdo->prepare('INSERT INTO site_integration_configs (site_id, config_key, config_value) VALUES (1, "TELEGRAM_BOT_TOKEN", :val) ON DUPLICATE KEY UPDATE config_value = :val');
+                    $stmt->execute([':val' => $botToken]);
+                }
+                $stmt = $pdo->prepare('INSERT INTO site_integration_configs (site_id, config_key, config_value) VALUES (1, "TELEGRAM_CHAT_ID", :val) ON DUPLICATE KEY UPDATE config_value = :val');
+                $stmt->execute([':val' => $chatId]);
+                set_flash('success', 'Đã lưu cấu hình Telegram Bot toàn cục.');
+                redirect_to('/admin/telegram');
+                break;
+
+            case '/admin/telegram/fetch-chat-id':
+                $telegramService = new TelegramService();
+                $updates = $telegramService->getUpdates();
+                $chatId = '';
+                if (!empty($updates)) {
+                    $latest = end($updates);
+                    $chatId = (string)($latest['message']['chat']['id'] ?? '');
+                }
+                if ($chatId !== '') {
+                    $pdo = db_pdo();
+                    $stmt = $pdo->prepare('INSERT INTO site_integration_configs (site_id, config_key, config_value) VALUES (1, "TELEGRAM_CHAT_ID", :val) ON DUPLICATE KEY UPDATE config_value = :val');
+                    $stmt->execute([':val' => $chatId]);
+                    set_flash('success', 'Lấy Chat ID thành công: ' . $chatId);
+                } else {
+                    set_flash('error', 'Chưa có tin nhắn mới nào. Vui lòng gửi 1 tin nhắn cho Bot rồi thử lại.');
+                }
+                redirect_to('/admin/telegram');
+                break;
+
+            case '/admin/telegram/test':
+                $telegramService = new TelegramService();
+                if ($telegramService->sendAlert('Tin nhắn thử nghiệm từ Affiliate MVP', 'Hệ thống đã kết nối Telegram thành công!')) {
+                    set_flash('success', 'Đã gửi tin nhắn thành công!');
+                } else {
+                    set_flash('error', 'Gửi tin nhắn thất bại. Vui lòng kiểm tra lại Token hoặc Chat ID.');
+                }
+                redirect_to('/admin/telegram');
+                break;
+
+            case '/profile/telegram/connect':
+                $userId = currentUserId();
+                // Nếu user đã kết nối rồi → trả về luôn, không gửi tin nữa
+                $pdo = db_pdo();
+                $chkStmt = $pdo->prepare("SELECT telegram_chat_id FROM users WHERE id = :id");
+                $chkStmt->execute([':id' => $userId]);
+                $existingChatId = (string)($chkStmt->fetchColumn() ?: '');
+                if ($existingChatId !== '') {
+                    json_response(true, 'Đã kết nối.', ['chat_id' => $existingChatId]);
+                    break;
+                }
+                // Chưa kết nối → tìm tin nhắn từ Telegram
+                $telegramService = new TelegramService();
+                if (telegram_bot_token() === '') {
+                    json_response(false, 'Admin chưa cấu hình Telegram Bot.');
+                    break;
+                }
+                $updates = $telegramService->getUpdates(0, 1);
+                $chatId = '';
+                $startPayload = 'uid_' . $userId;
+                foreach ($updates as $update) {
+                    $text = $update['message']['text'] ?? '';
+                    if ($text === '/start ' . $startPayload || $text === '/start') {
+                        $chatId = (string)($update['message']['chat']['id'] ?? '');
+                        break;
+                    }
+                }
+                if ($chatId === '' && !empty($updates)) {
+                    $latest = end($updates);
+                    $chatId = (string)($latest['message']['chat']['id'] ?? '');
+                }
+                if ($chatId === '') {
+                    json_response(false, 'waiting');
+                    break;
+                }
+                // Lưu chat_id
+                $userService = new UserService();
+                $userService->updateTelegramChatId($userId, $chatId);
+                // Gửi tin chào (chỉ 1 lần duy nhất)
+                $userName = currentUser()['name'] ?? 'User';
+                $botToken = telegram_bot_token();
+                $ch = curl_init("https://api.telegram.org/bot{$botToken}/sendMessage");
+                curl_setopt_array($ch, [
+                    CURLOPT_POST => true,
+                    CURLOPT_POSTFIELDS => json_encode([
+                        'chat_id' => $chatId,
+                        'text' => "✅ Kết nối thành công!\n\nXin chào <b>{$userName}</b>, bạn sẽ nhận thông báo từ Affiliate MVP tại đây.",
+                        'parse_mode' => 'HTML',
+                    ]),
+                    CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT => 5,
+                ]);
+                curl_exec($ch);
+                curl_close($ch);
+                json_response(true, 'Kết nối Telegram thành công!', ['chat_id' => $chatId]);
+                break;
+
+            case '/profile/telegram/disconnect':
+                $userService = new UserService();
+                $userService->updateTelegramChatId(currentUserId(), '');
+                json_response(true, 'Đã ngắt kết nối Telegram.');
+                break;
+
             // ── My Products: manual add ──
             case '/my-products/add':
                 $result = $userProductService->addManual($_POST);
@@ -1275,14 +1385,14 @@ switch ($path) {
         render('dashboard/index', [
             'pageTitle'      => 'Dashboard',
             'currentPage'    => 'dashboard',
-            'productSummary' => $productSyncService->dashboardSummary(),
-            'linkSummary'    => $linkService->summary(),
-            'contentSummary' => $contentService->summary(),
-            'postSummary'    => $postingService->summary(),
-            'recentLogs'     => $taskLogService->recent(5),
+            'productSummary' => $productSyncService->dashboardSummary(true),
+            'linkSummary'    => $linkService->summary(true),
+            'contentSummary' => $contentService->summary(true),
+            'postSummary'    => $postingService->summary(true),
+            'recentLogs'     => $taskLogService->recent(5, true),
             'automationSettings' => $automationSettings,
             'integrationStatus' => $automationSettingsService->integrationStatus(),
-            'topSellingProducts' => $productSyncService->topSellingProducts(5, (int)($automationSettings['min_sold_count'] ?? 0)),
+            'topSellingProducts' => $productSyncService->topSellingProducts(5, (int)($automationSettings['min_sold_count'] ?? 0), true),
         ]);
         break;
 
@@ -1626,6 +1736,57 @@ switch ($path) {
     // ══════════════════════════════════════════
     //  ADMIN — Role Management
     // ══════════════════════════════════════════
+    case '/admin/telegram':
+        requirePermission('admin.sites');
+        $pdo = db_pdo();
+        // Lấy danh sách user đã kết nối telegram cá nhân
+        $stmt = $pdo->prepare("
+            SELECT u.id, u.username, u.full_name, u.email, u.telegram_chat_id, u.updated_at, s.name as site_name
+            FROM users u
+            LEFT JOIN sites s ON u.site_id = s.id
+            WHERE u.telegram_chat_id IS NOT NULL AND u.telegram_chat_id != ''
+            ORDER BY u.updated_at DESC
+        ");
+        $stmt->execute();
+        $connectedUsers = $stmt->fetchAll();
+
+        $telegramService = new TelegramService();
+        render('admin/telegram/index', [
+            'pageTitle' => 'Telegram Bot (Global)',
+            'currentPage' => 'admin_telegram',
+            'isConfigured' => $telegramService->isConfigured(),
+            'chatId' => $telegramService->configuredChatId(),
+            'connectedUsers' => $connectedUsers
+        ]);
+        break;
+
+    case '/profile':
+        $pdo = db_pdo();
+        $stmt = $pdo->prepare(
+            "SELECT u.*, r.name AS role_name, r.code AS role_code,
+                    s.code AS site_code, s.name AS site_name
+             FROM users u
+             JOIN roles r ON r.id = u.role_id
+             LEFT JOIN sites s ON s.id = u.site_id
+             WHERE u.id = :id"
+        );
+        $stmt->execute([':id' => currentUserId()]);
+        $profileUser = $stmt->fetch();
+        if (!$profileUser) {
+            redirect_to('/');
+            break;
+        }
+        $telegramService = new TelegramService();
+        $botUsername = $telegramService->getBotUsername();
+        render('profile/index', [
+            'pageTitle' => 'Hồ sơ cá nhân',
+            'currentPage' => 'profile',
+            'user' => $profileUser,
+            'botUsername' => $botUsername,
+            'botConfigured' => telegram_bot_token() !== '',
+        ]);
+        break;
+
     case '/admin/roles':
         requirePermission('admin.permissions');
         $permService = new PermissionService();

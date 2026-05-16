@@ -109,6 +109,10 @@
                         <svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 21v-4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v4M9 7h6M9 11h6"/></svg>
                         Sites & Chi nhánh
                     </a>
+                    <a href="<?= url('/admin/telegram') ?>" class="nav-item <?= $currentPage === 'admin_telegram' ? 'active' : '' ?>">
+                        <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                        Telegram Bot
+                    </a>
                 <?php endif; ?>
                 <?php if (hasPermission('admin.users')): ?>
                     <a href="<?= url('/admin/users') ?>" class="nav-item <?= $currentPage === 'admin_users' ? 'active' : '' ?>">
@@ -131,11 +135,13 @@
     $activeSite = currentSite();
     ?>
     <div class="sidebar-user">
-        <div class="sidebar-user-avatar">
+        <a href="<?= url('/profile') ?>" class="sidebar-user-avatar">
             <?= $user ? strtoupper(mb_substr($user['name'], 0, 1)) : '?' ?>
-        </div>
+        </a>
         <div class="sidebar-user-meta">
-            <div class="sidebar-user-name"><?= $user ? e($user['name']) : 'Guest' ?></div>
+            <a href="<?= url('/profile') ?>" class="sidebar-user-name">
+                <?= $user ? e($user['name']) : 'Guest' ?>
+            </a>
             <div class="sidebar-user-role"><?= $user ? e($user['role_name']) : '' ?></div>
         </div>
         <a href="<?= url('/logout') ?>" title="Đăng xuất" class="sidebar-logout">⏻</a>

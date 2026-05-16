@@ -121,18 +121,22 @@ final class AffiliateLinkService
         return null;
     }
 
-    public function summary(): array
+    public function summary(bool $global = false): array
     {
+        $where = $global ? '' : 'WHERE site_id = :site_id';
         $stmt = $this->pdo->prepare(
             'SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN status = \'active\' THEN 1 ELSE 0 END) AS active_count,
                 SUM(CASE WHEN status = \'expired\' THEN 1 ELSE 0 END) AS expired_count,
                 SUM(CASE WHEN status = \'error\' THEN 1 ELSE 0 END) AS error_count
-             FROM affiliate_links
-             WHERE site_id = :site_id'
+             FROM affiliate_links ' . $where
         );
-        $stmt->execute([':site_id' => currentSiteId()]);
+        $params = [];
+        if (!$global) {
+            $params[':site_id'] = currentSiteId();
+        }
+        $stmt->execute($params);
         $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
         return [

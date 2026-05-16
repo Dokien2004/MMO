@@ -146,8 +146,9 @@ final class ContentService
         return null;
     }
 
-    public function summary(): array
+    public function summary(bool $global = false): array
     {
+        $where = $global ? '' : 'WHERE site_id = :site_id';
         $stmt = $this->pdo->prepare(
             'SELECT
                 COUNT(*) AS total,
@@ -155,10 +156,13 @@ final class ContentService
                 SUM(CASE WHEN status = \'approved\' THEN 1 ELSE 0 END) AS approved_count,
                 SUM(CASE WHEN status = \'rejected\' THEN 1 ELSE 0 END) AS rejected_count,
                 SUM(CASE WHEN status = \'used\' THEN 1 ELSE 0 END) AS used_count
-             FROM generated_contents
-             WHERE site_id = :site_id'
+             FROM generated_contents ' . $where
         );
-        $stmt->execute([':site_id' => currentSiteId()]);
+        $params = [];
+        if (!$global) {
+            $params[':site_id'] = currentSiteId();
+        }
+        $stmt->execute($params);
         $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
         return [
