@@ -24,13 +24,17 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
     .two-col-section { flex-direction: column !important }
     .publish-mode-grid { flex-direction: column !important }
     .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch }
-    .table-main th, .table-main td { white-space: nowrap; font-size: 12px; padding: 6px 8px }
+    .table-main th, .table-main td { white-space: normal; font-size: 12px; padding: 6px 8px }
     .products-table tbody tr { display: table-row; }
     .quick-actions { flex-direction: column !important }
     .quick-actions .btn { width: 100%; text-align: center; justify-content: center }
     .radar-card-grid { grid-template-columns: 1fr !important }
     .top-sold-card { margin-top: 16px }
 }
+@media (max-width: 640px) {
+    .card-title, .section-heading { font-size: 12px }
+}
+.word-break { word-break: break-word; overflow-wrap: break-word; }
 @media (max-width: 400px) {
     .stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px }
     .stat-card .value { font-size: 22px }
@@ -79,7 +83,7 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
             <?php else: ?>
                 <?php foreach ($topRadarEligible as $p): ?>
                     <div style="padding:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated)">
-                        <div style="font-weight:600;font-size:13px;margin-bottom:4px"><?= e((string)$p['product_name']) ?></div>
+                        <div style="font-weight:600;font-size:13px;margin-bottom:4px;word-break:break-word;overflow-wrap:break-word"><?= e((string)$p['product_name']) ?></div>
                         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
                             <span class="badge badge-<?= e((string)$p['source_platform']) ?>" style="font-size:11px"><?= e((string)$p['source_platform']) ?></span>
                             <span class="metric-pill hot" style="font-size:11px"><?= number_format((int)($p['sold_count'] ?? 0)) ?> đã bán</span>
@@ -102,7 +106,7 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
                     <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
                         <span style="width:24px;text-align:center;font-size:13px;color:var(--text-muted);flex-shrink:0"><?= $rank++ ?></span>
                         <div style="flex:1;min-width:0">
-                            <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><?= e((string)$p['product_name']) ?></div>
+                            <div style="font-weight:600;font-size:13px;word-break:break-word;overflow-wrap:break-word"><?= e((string)$p['product_name']) ?></div>
                             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
                                 <?php if ((float)($p['price'] ?? 0) > 0): ?>
                                     <span class="text-sm" style="color:var(--text-sec)"><?= number_format((float)$p['price'], 0, ',', '.') ?> ₫</span>
@@ -214,17 +218,17 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
                     <tbody>
                     <?php foreach ($allProducts as $product): ?>
                         <tr id="product-row-<?= (int)$product['id'] ?>">
-                            <td>
+                            <td data-label="Tên SP">
                                 <strong class="item-title" style="font-size:13px"><?= e((string)$product['product_name']) ?></strong>
                                 <div class="item-meta sub" style="font-size:11px">#<?= (int)$product['id'] ?></div>
                                 <?php if (!empty($product['product_url'])): ?>
                                     <a href="<?= e((string)$product['product_url']) ?>" target="_blank" rel="noreferrer" class="text-xs" style="color:var(--accent);display:inline-block;margin-top:2px">Mở ↗</a>
                                 <?php endif; ?>
                             </td>
-                            <td><span class="badge badge-<?= e((string)$product['source_platform']) ?>" style="font-size:11px"><?= e((string)$product['source_platform']) ?></span></td>
-                            <td class="text-sm"><?= (float)($product['price'] ?? 0) > 0 ? number_format((float)$product['price'], 0, ',', '.') . ' ₫' : '—' ?></td>
-                            <td><span class="metric-pill <?= (int)($product['sold_count'] ?? 0) >= 1000 ? 'hot' : '' ?>" style="font-size:11px"><?= number_format((int)($product['sold_count'] ?? 0)) ?></span></td>
-                            <td style="font-size:11px">
+                            <td data-label="Nguồn"><span class="badge badge-<?= e((string)$product['source_platform']) ?>" style="font-size:11px"><?= e((string)$product['source_platform']) ?></span></td>
+                            <td data-label="Giá" class="text-sm"><?= (float)($product['price'] ?? 0) > 0 ? number_format((float)$product['price'], 0, ',', '.') . ' ₫' : '—' ?></td>
+                            <td data-label="Đã bán"><span class="metric-pill <?= (int)($product['sold_count'] ?? 0) >= 1000 ? 'hot' : '' ?>" style="font-size:11px"><?= number_format((int)($product['sold_count'] ?? 0)) ?></span></td>
+                            <td data-label="Link Aff" style="font-size:11px">
                                 <?php if (!empty($product['affiliate_url'])): ?>
                                     <span style="color:#22c55e" title="<?= e($product['affiliate_url']) ?>">✓ Có</span>
                                 <?php else: ?>

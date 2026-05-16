@@ -112,31 +112,8 @@
 <!-- Quick Actions -->
 <div class="grid-3">
     <div class="card">
-        <div class="card-title">Tạo link affiliate thật</div>
-        <form data-ajax method="POST" action="<?= url('/links/generate-all') ?>">
-            <div class="form-group">
-                <label class="form-label">Mã chiến dịch</label>
-                <input class="form-control" name="campaign_code" value="MVP-LAPTOP">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Số lượng</label>
-                <input class="form-control" name="limit" type="number" min="1" max="20" value="5">
-            </div>
-            <button type="submit" class="btn btn-accent btn-full">Tạo liên kết</button>
-        </form>
-    </div>
-    <div class="card">
         <div class="card-title">Viết content bằng AI</div>
         <form data-ajax method="POST" action="<?= url('/contents/generate-all') ?>">
-            <div class="form-group">
-                <label class="form-label">Nguồn sinh</label>
-                <select class="form-control" name="provider">
-                    <option value="template_engine">Mẫu có sẵn</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="gemini">Gemini</option>
-                    <option value="auto">Tự động fallback</option>
-                </select>
-            </div>
             <div class="form-group">
                 <label class="form-label">Số lượng</label>
                 <input class="form-control" name="limit" type="number" min="1" max="20" value="5">
@@ -153,6 +130,14 @@
                     <option value="fanpage_manual">Fanpage (thủ công)</option>
                     <option value="fanpage_api">Fanpage (API tự động)</option>
                 </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Ngày giờ bắt đầu</label>
+                <input class="form-control" name="scheduled_at" type="datetime-local" value="<?= date('Y-m-d\TH:i') ?>">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Khoảng cách (phút)</label>
+                <input class="form-control" name="interval_minutes" type="number" min="1" max="1440" value="15">
             </div>
             <div class="form-group">
                 <label class="form-label">Số bài</label>

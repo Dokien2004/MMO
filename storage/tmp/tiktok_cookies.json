@@ -1,0 +1,72 @@
+[
+  {
+    "name": "tt_chain_token",
+    "value": "5eMjdmfqLJwzy2suACC3TA==",
+    "domain": ".tiktok.com",
+    "path": "/",
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "Lax",
+    "expires": 1794501757.707402
+  },
+  {
+    "name": "_waftokenid",
+    "value": "eyJ2Ijp7ImEiOiJxSHdPWVRCWTc3eFpxNVhlNUM0dHNiWGZUd3VaekxPdis5RG5VeWtORkdFPSIsImIiOjE3Nzg5NDk3NTcsImMiOiJPbDAxWUgyUE1WOGI3VGMrVDZMRkJBQlo2NElTL0dDZ3oxZDhZN3Z0b0tVPSJ9LCJzIjoiMG44bER0K010MDFXejJ2cThVT1ZFS0FMQ2M1UkVzeDhpdGNCRTJTU2NMcz0ifQ",
+    "domain": "www.tiktok.com",
+    "path": "/",
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax",
+    "expires": 1778950057.707555
+  },
+  {
+    "name": "tiktok_webapp_theme_source",
+    "value": "auto",
+    "domain": ".www.tiktok.com",
+    "path": "/",
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax",
+    "expires": 1804869759
+  },
+  {
+    "name": "tiktok_webapp_theme",
+    "value": "light",
+    "domain": ".www.tiktok.com",
+    "path": "/",
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax",
+    "expires": 1804869759
+  },
+  {
+    "name": "ttwid",
+    "value": "1%7CG4WQEKyHt0JyfZ161EW3YJHiRYOYZTRc13JNQauLOR0%7C1778949760%7Cf7212f6979ab9a827bd97c2837ede4210ce92340cdc50b916e3621e49ac0e09c",
+    "domain": ".tiktok.com",
+    "path": "/",
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None",
+    "expires": 1810485760.408648
+  },
+  {
+    "name": "msToken",
+    "value": "mU9DVIlMmMQtDtUib42GWotbwMe9TnDrgmScHdwIObuKTSPZT1vnWQq_SyBPlDQ0dWP0oakvsyLvpJ-LDoB46Be0gRfLm5q4-tg4N1g6PDy2UmC5IrF9bgnfHXEG",
+    "domain": ".tiktok.com",
+    "path": "/",
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "None",
+    "expires": 1779813759.800564
+  },
+  {
+    "name": "msToken",
+    "value": "mU9DVIlMmMQtDtUib42GWotbwMe9TnDrgmScHdwIObuKTSPZT1vnWQq_SyBPlDQ0dWP0oakvsyLvpJ-LDoB46Be0gRfLm5q4-tg4N1g6PDy2UmC5IrF9bgnfHXEG",
+    "domain": "www.tiktok.com",
+    "path": "/",
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax",
+    "expires": 1786725760
+  }
+]

@@ -139,10 +139,10 @@ for ($i = 0; $i < count($priceDataK); $i++) { $scatterData[] = ['x' => $priceDat
             <tbody>
             <?php $r=1; foreach ($catGroups as $cat => $sold): if($sold==0) continue; ?>
                 <tr>
-                    <td><strong><?= e($cat) ?></strong></td>
-                    <td><span class="metric-pill hot"><?= number_format($sold) ?></span></td>
-                    <td class="text-sm"><?= $catTotal[$cat] ?></td>
-                    <td><span class="badge <?= $r<=2?'badge-danger':'badge-warning' ?>"><?= $r<=2?'Bán chạy':'Ổn định' ?></span></td>
+                    <td data-label="Ngành"><strong><?= e($cat) ?></strong></td>
+                    <td data-label="Tổng lượt bán"><span class="metric-pill hot"><?= number_format($sold) ?></span></td>
+                    <td data-label="Số SP" class="text-sm"><?= $catTotal[$cat] ?></td>
+                    <td data-label="Trạng thái"><span class="badge <?= $r<=2?'badge-danger':'badge-warning' ?>"><?= $r<=2?'Bán chạy':'Ổn định' ?></span></td>
                 </tr>
             <?php $r++; endforeach; ?>
             </tbody>
@@ -237,17 +237,17 @@ $csrfToken = csrf_token();
             <tbody>
             <?php foreach ($scrapedProducts as $sp): ?>
                 <tr id="scraped-row-<?= (int)$sp['id'] ?>">
-                    <td>
+                    <td data-label="Sản phẩm">
                         <strong style="font-size:13px"><?= e(mb_substr($sp['product_name'], 0, 55)) ?></strong>
                         <?php if (!empty($sp['product_url'])): ?>
                             <a href="<?= e($sp['product_url']) ?>" target="_blank" rel="noreferrer" style="font-size:11px;color:var(--accent);display:block;margin-top:2px">Mở ↗</a>
                         <?php endif; ?>
                     </td>
-                    <td><span class="badge badge-<?= e($sp['source_platform']) ?>" style="font-size:11px"><?= e($sp['source_platform']) ?></span></td>
-                    <td class="text-sm"><?= (float)($sp['price'] ?? 0) > 0 ? number_format((float)$sp['price'], 0, ',', '.') . ' ₫' : '—' ?></td>
-                    <td><span class="metric-pill <?= (int)($sp['sold_count'] ?? 0) >= 1000 ? 'hot' : '' ?>" style="font-size:11px"><?= number_format((int)($sp['sold_count'] ?? 0)) ?></span></td>
-                    <td style="font-size:11px"><?= !empty($sp['affiliate_url']) ? '<span style="color:#22c55e">✓ Có</span>' : '<span style="color:var(--text-muted)">—</span>' ?></td>
-                    <td>
+                    <td data-label="Nguồn"><span class="badge badge-<?= e($sp['source_platform']) ?>" style="font-size:11px"><?= e($sp['source_platform']) ?></span></td>
+                    <td data-label="Giá" class="text-sm"><?= (float)($sp['price'] ?? 0) > 0 ? number_format((float)$sp['price'], 0, ',', '.') . ' ₫' : '—' ?></td>
+                    <td data-label="Đã bán"><span class="metric-pill <?= (int)($sp['sold_count'] ?? 0) >= 1000 ? 'hot' : '' ?>" style="font-size:11px"><?= number_format((int)($sp['sold_count'] ?? 0)) ?></span></td>
+                    <td data-label="Link Aff" style="font-size:11px"><?= !empty($sp['affiliate_url']) ? '<span style="color:#22c55e">✓ Có</span>' : '<span style="color:var(--text-muted)">—</span>' ?></td>
+                    <td data-label="Thao tác">
                         <?php if (!empty($sp['usp_id'])): ?>
                             <button
                                 type="button"

@@ -142,6 +142,7 @@ a:hover { color: var(--accent-light); }
     color: var(--text-sec); font-size: 13px; font-weight: 500;
     transition: var(--transition); cursor: pointer;
     position: relative; margin-bottom: 2px;
+    box-sizing: border-box;
 }
 
 .nav-item:hover {
@@ -157,6 +158,59 @@ a:hover { color: var(--accent-light); }
     top: 50%; transform: translateY(-50%);
     width: 3px; height: 20px; border-radius: 0 3px 3px 0;
     background: var(--gradient);
+}
+
+.nav-item-sub {
+    padding: 8px 12px 8px 32px;
+    font-size: 12px;
+    color: var(--text-sec);
+    display: none;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.posts-expanded .nav-item-sub {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.posts-expanded .nav-item-sub:hover {
+    color: var(--accent);
+}
+
+.sub-arrow {
+    font-size: 11px;
+    opacity: 0.6;
+    flex-shrink: 0;
+}
+
+.sub-arrow::before {
+    content: '›';
+    font-size: 12px;
+    opacity: 0.5;
+}
+
+.nav-item-sub .sub-arrow::before {
+    font-size: 10px;
+    margin-right: 4px;
+}
+
+.nav-main {
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    border: none;
+    background: none;
+    font-family: inherit;
+    font-size: inherit;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.nav-main .sub-arrow {
+    margin-left: auto;
 }
 
 .nav-item svg {
@@ -519,12 +573,11 @@ tr:hover td { background: var(--table-hover); }
 td strong { color: var(--text); font-weight: 500; }
 td .sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 td .mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; word-break: break-all; color: var(--text-muted); }
-.table-main { min-width: 880px; }
+.table-main { min-width: 0; width: 100%; table-layout: auto; }
 .table-compact th { padding: 10px 12px; }
 .table-compact td { padding: 12px; }
 .item-title {
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-    overflow: hidden; line-height: 1.45;
+    display: block; overflow-wrap: break-word; word-break: break-word; line-height: 1.4; white-space: normal;
 }
 .item-meta { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:6px; }
 .dot-sep::before { content:'•'; color: var(--text-muted); margin: 0 2px; }
@@ -925,15 +978,27 @@ select.form-control { cursor: pointer; }
     .pipeline-step .step-label { font-size: 10px; }
     .pipeline-arrow { width: 24px; }
 
-    /* Tables: card-style on mobile */
-    table { font-size: 12px; }
-    th { font-size: 10px; padding: 10px 10px; }
-    td { padding: 10px 10px; }
-    .table-wrap { border-radius: 8px; margin-left: -2px; margin-right: -2px; }
+    /* Tables: full-width card stack on mobile - NO horizontal scroll */
+    table { font-size: 11px; width: 100%; table-layout: fixed; }
+    th { font-size: 10px; padding: 6px 6px; }
+    td { padding: 5px 8px; word-wrap: break-word; }
+    .table-wrap { overflow-x: hidden; border-radius: 8px; width: 100%; margin: 0; }
+    .table-main { min-width: unset !important; width: 100%; table-layout: fixed; }
+    .products-table { min-width: unset !important; width: 100%; table-layout: fixed; }
+    .table-main thead { display: none; }
+    .table-main tbody tr { display: block; width: 100%; border-bottom: 1px solid var(--border); margin-bottom: 0; }
+    .table-main tbody tr:last-child { border-bottom: none; }
+    .table-main td { display: block; width: 100%; box-sizing: border-box; padding: 3px 10px; border-bottom: none; font-size: 12px; line-height: 1.4; }
+    .table-main td::before { display: none; }
+    .table-main td[data-label] { display: block; width: 100%; box-sizing: border-box; padding: 3px 10px; border-bottom: none; font-size: 12px; line-height: 1.4; }
+    .table-main .item-title, .table-main .item-title strong, .table-main td > strong { display: block; word-wrap: break-word; overflow-wrap: break-word; white-space: normal; line-height: 1.3; font-size: 12px; }
+    .table-main .item-meta { font-size: 10px; color: var(--text-muted); }
+    .table-main .badge, .table-main .metric-pill { font-size: 10px; display: inline-block; }
+    .table-main td:last-child { border-bottom: none; padding-bottom: 8px; }
     .mono { font-size: 10px; }
-    .truncate { max-width: 140px; }
-    .copyable-link { max-width: 260px; }
-    .media-thumb { max-width: 130px; }
+    .truncate { max-width: 100%; white-space: normal; }
+    .copyable-link { max-width: 100%; }
+    .media-thumb { max-width: 80px; }
 
     /* Buttons */
     .btn { padding: 8px 12px; font-size: 11px; }

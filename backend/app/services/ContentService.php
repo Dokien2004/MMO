@@ -95,7 +95,13 @@ final class ContentService
                 continue;
             }
 
-            $generated[] = $this->generateDraftForProduct((int)$product['id'], $provider);
+            try {
+                $this->generateDraftForProduct((int)$product['id'], $provider);
+            } catch (Throwable $e) {
+                // Skip failed products, continue to next
+                continue;
+            }
+            $generated[] = $product['id'];
             if (count($generated) >= $limit) {
                 break;
             }
@@ -104,6 +110,9 @@ final class ContentService
         return [
             'count' => count($generated),
             'contents' => $generated,
+            'message' => count($generated) > 0
+                ? 'Da sinh ' . count($generated) . ' draft content thanh cong.'
+                : 'Khong sinh duoc content nao. Hay kiem tra cau hinh AI provider.',
         ];
     }
 
@@ -190,24 +199,26 @@ final class ContentService
     private function resolveProviderPayload(array $product, string $provider): array
     {
         $normalized = strtolower(trim($provider));
-        if ($normalized === 'auto') {
-            foreach (['openai', 'gemini'] as $aiProvider) {
-                $payload = $this->tryAiProvider($product, $aiProvider);
-                if ($payload !== null) {
-                    return $payload;
-                }
-            }
-            return $this->templatePayload($product, 'Fallback ve template_engine do chua co AI provider kha dung.');
-        }
 
-        if (in_array($normalized, ['gemini', 'openai'], true)) {
-            $payload = $this->tryAiProvider($product, $normalized);
+        // gemini → GeminiContentProvider → 9router
+        if ($normalized === 'gemini') {
+            $payload = $this->tryAiProvider($product, 'gemini');
             if ($payload !== null) {
                 return $payload;
             }
-            return $this->templatePayload($product, 'Fallback ve template_engine do ' . strtoupper($normalized) . ' loi hoac chua cau hinh.');
+            throw new RuntimeException('Gemini qua 9router khong thanh cong. Vui long kiem tra cau hinh hoac doi sang provider khac.');
         }
 
+        // openai/minimax → OpenAIContentProvider fallback chain → 9router
+        if ($normalized === 'openai' || $normalized === 'minimax') {
+            $payload = $this->tryAiProvider($product, 'openai');
+            if ($payload !== null) {
+                return $payload;
+            }
+            throw new RuntimeException('Minimax/9router khong thanh cong. Vui long kiem tra cau hinh hoac doi sang provider khac.');
+        }
+
+        // template_engine — local template, khong can API
         return $this->templatePayload($product, 'Sinh boi template noi bo. Co the thay bang API AI that sau.');
     }
 
@@ -300,10 +311,8 @@ final class ContentService
             'Giá tham khảo hiện tại khoảng ' . $price . ' VND. Boss nên kiểm tra lại giá tại thời điểm đăng vì sàn có thể thay đổi theo khuyến mãi.',
             $soldLine,
             'Nếu bạn đang tìm một sản phẩm dễ chia sẻ, có link mua rõ ràng và phù hợp để đăng bài review ngắn, đây là lựa chọn nên thử.',
-            'Xem chi tiết tại đây: ' . $product['affiliate_url'],
         ]);
     }
-
     private function buildTemplateHashtags(array $product): string
     {
         return '#affiliate #mvp #reviewnhanh #' . preg_replace('/[^a-z0-9]+/i', '', strtolower((string)$product['source_platform']));

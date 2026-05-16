@@ -38,6 +38,8 @@ require_once __DIR__ . '/services/UserProductService.php';
 require_once __DIR__ . '/services/SocialChannelService.php';
 require_once __DIR__ . '/services/FacebookGroupPublisher.php';
 require_once __DIR__ . '/services/TikTokPublisher.php';
+require_once __DIR__ . '/services/InstagramPublisher.php';
+require_once __DIR__ . '/services/ThreadsPublisher.php';
 
 function bootstrap_runtime_schema_once(): void
 {

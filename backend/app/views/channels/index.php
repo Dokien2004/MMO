@@ -113,15 +113,15 @@ $statusLabels = [
                     $pct = $limit > 0 ? min(100, round($postsToday / $limit * 100)) : 0;
                     ?>
                     <tr>
-                        <td>
+                        <td data-label="Kênh">
                             <strong style="font-size:13px;"><?= $type['icon'] ?> <?= e((string)$ch['channel_name']) ?></strong>
                             <?php if (!empty($ch['channel_id'])): ?>
                                 <div class="sub" style="font-size:11px;">ID: <?= e((string)$ch['channel_id']) ?></div>
                             <?php endif; ?>
                         </td>
-                        <td><span class="badge <?= $type['badge'] ?>" style="font-size:11px;"><?= $type['label'] ?></span></td>
-                        <td><span class="badge <?= $status['class'] ?>"><?= $status['label'] ?></span></td>
-                        <td>
+                        <td data-label="Loại"><span class="badge <?= $type['badge'] ?>" style="font-size:11px;"><?= $type['label'] ?></span></td>
+                        <td data-label="Trạng thái"><span class="badge <?= $status['class'] ?>"><?= $status['label'] ?></span></td>
+                        <td data-label="Hôm nay">
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <div style="flex:1;height:6px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;">
                                     <div style="width:<?= $pct ?>%;height:100%;background:<?= $pct >= 80 ? 'var(--danger,#ef4444)' : 'var(--accent)' ?>;border-radius:3px;transition:width .3s;"></div>
@@ -129,8 +129,8 @@ $statusLabels = [
                                 <span class="text-sm"><?= $postsToday ?>/<?= $limit ?></span>
                             </div>
                         </td>
-                        <td class="text-sm"><?= !empty($ch['last_post_at']) ? date('d/m H:i', strtotime((string)$ch['last_post_at'])) : '—' ?></td>
-                        <td>
+                        <td data-label="Đăng gần nhất" class="text-sm"><?= !empty($ch['last_post_at']) ? date('d/m H:i', strtotime((string)$ch['last_post_at'])) : '—' ?></td>
+                        <td data-label="Thao tác">
                             <div style="display:flex;gap:6px;">
                                 <button class="btn btn-sm btn-ghost" onclick="editChannel(<?= (int)$ch['id'] ?>)" title="Sửa">✏️</button>
                                 <button class="btn btn-sm btn-ghost" onclick="deleteChannel(<?= (int)$ch['id'] ?>, '<?= e(addslashes($ch['channel_name'])) ?>')" title="Xóa" style="color:var(--danger);">🗑</button>

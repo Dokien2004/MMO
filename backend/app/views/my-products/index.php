@@ -103,7 +103,7 @@ $statusLabels = [
             </div>
         <?php else: ?>
             <div class="table-wrap">
-                <table style="min-width:900px;">
+                <table>
                     <thead>
                         <tr>
                             <th>Sản phẩm</th>
@@ -132,7 +132,7 @@ $statusLabels = [
                         };
                         ?>
                         <tr>
-                            <td>
+                            <td data-label="Sản phẩm">
                                 <strong style="font-size:13px;"><?= e((string)$item['product_name']) ?></strong>
                                 <?php if (!empty($item['notes'])): ?>
                                     <div class="sub" style="font-size:11px;color:var(--text-muted);margin-top:2px;">📝 <?= e(mb_substr((string)$item['notes'], 0, 60)) ?></div>
@@ -141,9 +141,9 @@ $statusLabels = [
                                     <a href="<?= e((string)$item['product_url']) ?>" target="_blank" rel="noreferrer" class="text-xs" style="color:var(--accent);display:inline-block;margin-top:2px;">Xem SP ↗</a>
                                 <?php endif; ?>
                             </td>
-                            <td><span class="badge badge-<?= e((string)($item['source_platform'] ?? 'shopee')) ?>" style="font-size:11px;"><?= e((string)($item['source_platform'] ?? 'shopee')) ?></span></td>
-                            <td class="text-sm"><?= (float)($item['price'] ?? 0) > 0 ? number_format((float)$item['price'], 0, ',', '.') . ' ₫' : '—' ?></td>
-                            <td>
+                            <td data-label="Nguồn"><span class="badge badge-<?= e((string)($item['source_platform'] ?? 'shopee')) ?>" style="font-size:11px;"><?= e((string)($item['source_platform'] ?? 'shopee')) ?></span></td>
+                            <td data-label="Giá" class="text-sm"><?= (float)($item['price'] ?? 0) > 0 ? number_format((float)$item['price'], 0, ',', '.') . ' ₫' : '—' ?></td>
+                            <td data-label="AI Score">
                                 <?php if ($score > 0): ?>
                                     <span style="font-weight:700;color:<?= $scoreColor ?>;font-size:15px;"><?= round($score, 1) ?></span>
                                     <?= $recBadge ?>
@@ -151,15 +151,15 @@ $statusLabels = [
                                     <span class="text-muted" style="font-size:12px;">—</span>
                                 <?php endif; ?>
                             </td>
-                            <td><span class="badge <?= $status['class'] ?>"><?= $status['label'] ?></span></td>
-                            <td>
+                            <td data-label="Trạng thái"><span class="badge <?= $status['class'] ?>"><?= $status['label'] ?></span></td>
+                            <td data-label="Link">
                                 <?php if ($hasAff): ?>
                                     <span class="badge badge-active" style="font-size:11px;">✓ Có link</span>
                                 <?php else: ?>
                                     <button class="btn btn-sm btn-accent" type="button" data-edit-product-id="<?= $id ?>" style="font-size:11px;padding:4px 10px;">+ Thêm link</button>
                                 <?php endif; ?>
                             </td>
-                            <td>
+                            <td data-label="Thao tác">
                                 <div style="display:flex;gap:6px;flex-wrap:wrap;">
                                     <button class="btn btn-sm btn-ghost" type="button" data-edit-product-id="<?= $id ?>" title="Sửa" style="padding:4px 8px;">✏️</button>
                                     <?php if ($hasAff && in_array($item['status'], ['active', 'pending'], true)): ?>

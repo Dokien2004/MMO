@@ -6,7 +6,16 @@ require_once __DIR__ . '/DatabaseStorage.php';
 require_once __DIR__ . '/ContentService.php';
 require_once __DIR__ . '/ProductSyncService.php';
 require_once __DIR__ . '/TaskLogService.php';
+require_once __DIR__ . '/DatabaseStorage.php';
+require_once __DIR__ . '/ContentService.php';
+require_once __DIR__ . '/ProductSyncService.php';
+require_once __DIR__ . '/TaskLogService.php';
+require_once __DIR__ . '/SocialChannelService.php';
 require_once __DIR__ . '/FacebookPagePublisher.php';
+require_once __DIR__ . '/FacebookGroupPublisher.php';
+require_once __DIR__ . '/TikTokPublisher.php';
+require_once __DIR__ . '/InstagramPublisher.php';
+require_once __DIR__ . '/ThreadsPublisher.php';
 
 final class PostingService
 {
@@ -15,6 +24,10 @@ final class PostingService
     private ProductSyncService $productSyncService;
     private TaskLogService $taskLogService;
     private FacebookPagePublisher $facebookPagePublisher;
+    private ?FacebookGroupPublisher $facebookGroupPublisher = null;
+    private ?TikTokPublisher $tiktokPublisher = null;
+    private ?InstagramPublisher $instagramPublisher = null;
+    private ?ThreadsPublisher $threadsPublisher = null;
     private PDO $pdo;
     private string $fileName = 'scheduled_posts.json';
 
@@ -26,6 +39,7 @@ final class PostingService
         $this->productSyncService = new ProductSyncService();
         $this->taskLogService = new TaskLogService();
         $this->facebookPagePublisher = new FacebookPagePublisher();
+        $this->channelService = new SocialChannelService();
     }
 
     public function schedulePost(int $contentId, string $channel = 'fanpage_manual', ?string $scheduledAt = null, ?int $socialChannelId = null): array
@@ -102,40 +116,56 @@ final class PostingService
             throw new InvalidArgumentException('Khong tim thay content de publish.');
         }
 
-        if (($post['channel'] ?? '') === 'fanpage_api') {
-            $result = $this->facebookPagePublisher->publish($content, $post);
-            $remotePostId = (string)($result['facebook_post_id'] ?? '');
-            $note = (string)$result['message'];
+        $channelMap = [
+            'fanpage_api'     => 'facebook_page',
+            'fanpage_manual'  => 'facebook_page',
+            'facebook_group'  => 'facebook_group',
+            'tiktok'          => 'tiktok',
+            'instagram'       => 'instagram',
+            'threads'         => 'threads',
+        ];
+        $channelType = $channelMap[$post['channel'] ?? ''] ?? '';
 
+        if ($channelType === '') {
+            throw new InvalidArgumentException('Channel không xác định: ' . ($post['channel'] ?? 'null'));
+        }
+
+        // Get social channel config if available
+        $socialChannel = null;
+        $socialChannelId = (int)($post['social_channel_id'] ?? 0);
+        if ($socialChannelId > 0) {
+            $socialChannel = $this->channelService->findById($socialChannelId);
+        }
+
+        $publisherResult = match ($channelType) {
+            'facebook_page' => $this->facebookPagePublisher->publish($content, $post),
+            'facebook_group' => $this->getFacebookGroupPublisher()->publish($content, $socialChannel ?? $post),
+            'tiktok' => $this->getTikTokPublisher()->publish($content, $socialChannel ?? $post),
+            'instagram' => $this->getInstagramPublisher()->publish($content, $socialChannel ?? $post),
+            'threads' => $this->getThreadsPublisher()->publish($content, $socialChannel ?? $post),
+            default => throw new InvalidArgumentException('Channel không hỗ trợ: ' . $channelType),
+        };
+
+        $remotePostId = (string)($publisherResult['facebook_post_id'] ?? $publisherResult['video_id'] ?? $publisherResult['post_id'] ?? $publisherResult['media_id'] ?? '');
+        $note = (string)$publisherResult['message'];
+
+        // Facebook Page: add affiliate comment
+        if ($channelType === 'facebook_page' && $remotePostId !== '') {
             $affiliateComment = $this->buildAffiliateComment($content);
-            if ($remotePostId !== '' && $affiliateComment !== '') {
+            if ($affiliateComment !== '') {
                 try {
                     $commentResult = $this->facebookPagePublisher->commentOnPost($remotePostId, $affiliateComment);
                     $note .= ' ' . $commentResult['message'];
                     if (!empty($commentResult['comment_id'])) {
                         $note .= ' Comment ID: ' . $commentResult['comment_id'];
                     }
-                    $this->taskLogService->create('facebook_affiliate_comment', 'success', [
-                        'post_id' => $postId,
-                        'content_id' => (int)$content['id'],
-                        'remote_post_id' => $remotePostId,
-                    ], [
-                        'comment_id' => $commentResult['comment_id'] ?? '',
-                    ]);
                 } catch (Throwable $throwable) {
-                    $note .= ' Tuy nhiên comment link affiliate lỗi: ' . $throwable->getMessage();
-                    $this->taskLogService->create('facebook_affiliate_comment', 'failed', [
-                        'post_id' => $postId,
-                        'content_id' => (int)$content['id'],
-                        'remote_post_id' => $remotePostId,
-                    ], [], $throwable->getMessage());
+                    $note .= ' Comment affiliate lỗi: ' . $throwable->getMessage();
                 }
             }
-
-            return $this->changePostStatus($postId, 'success', $note, $remotePostId);
         }
 
-        throw new InvalidArgumentException('Channel nay khong ho tro publish tu dong. Dung mark posted cho che do manual.');
+        return $this->changePostStatus($postId, 'success', $note, $remotePostId);
     }
 
     private function buildAffiliateComment(array $content): string
@@ -149,6 +179,38 @@ final class PostingService
         return "Link mua / săn deal: " . $affiliateUrl;
     }
 
+    private function getFacebookGroupPublisher(): FacebookGroupPublisher
+    {
+        if ($this->facebookGroupPublisher === null) {
+            $this->facebookGroupPublisher = new FacebookGroupPublisher();
+        }
+        return $this->facebookGroupPublisher;
+    }
+
+    private function getTikTokPublisher(): TikTokPublisher
+    {
+        if ($this->tiktokPublisher === null) {
+            $this->tiktokPublisher = new TikTokPublisher();
+        }
+        return $this->tiktokPublisher;
+    }
+
+    private function getInstagramPublisher(): InstagramPublisher
+    {
+        if ($this->instagramPublisher === null) {
+            $this->instagramPublisher = new InstagramPublisher();
+        }
+        return $this->instagramPublisher;
+    }
+
+    private function getThreadsPublisher(): ThreadsPublisher
+    {
+        if ($this->threadsPublisher === null) {
+            $this->threadsPublisher = new ThreadsPublisher();
+        }
+        return $this->threadsPublisher;
+    }
+
     public function publishDueScheduledPosts(int $limit = 10): array
     {
         $scheduledPosts = $this->allPosts();
@@ -159,7 +221,9 @@ final class PostingService
             if (($post['status'] ?? '') !== 'scheduled') {
                 continue;
             }
-            if (($post['channel'] ?? '') !== 'fanpage_api') {
+            // Support all channel types for auto-publish
+            $supportedChannels = ['fanpage_api', 'fanpage_manual', 'facebook_group', 'tiktok', 'instagram', 'threads'];
+            if (!in_array(($post['channel'] ?? ''), $supportedChannels, true)) {
                 continue;
             }
             $scheduledAt = strtotime((string)($post['scheduled_at'] ?? ''));

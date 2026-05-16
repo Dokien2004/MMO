@@ -304,6 +304,11 @@ final class PromptTemplateService
         }
         $ensured = true;
 
+        // Skip DDL inside a transaction — CREATE TABLE triggers implicit commit in MySQL
+        if ($this->pdo->inTransaction()) {
+            return;
+        }
+
         $this->pdo->exec("CREATE TABLE IF NOT EXISTS prompt_templates (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT,
             site_id INT NOT NULL DEFAULT 1,

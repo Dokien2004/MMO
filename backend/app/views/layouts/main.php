@@ -25,7 +25,7 @@
             <small>Laptop Pipeline</small>
         </div>
     </div>
-    <nav class="sidebar-nav">
+    <nav class="sidebar-nav<?= ($currentPage ?? '') === 'posts' ? ' posts-active' : '' ?>">
         <?php
         $sidebarModules = [
             'DASHBOARD' => ['url' => '/',            'page' => 'dashboard', 'label' => 'Tổng quan',           'svg' => '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>'],
@@ -34,7 +34,11 @@
             'MY_PRODUCTS' => ['url' => '/my-products', 'page' => 'my_products', 'label' => 'SP Đã Chọn', 'svg' => '<svg viewBox="0 0 24 24"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>'],
             'PRODUCTS'  => ['url' => '/products',   'page' => 'products',  'label' => 'Sản phẩm',           'svg' => '<svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>'],
             'CONTENTS'  => ['url' => '/contents',   'page' => 'contents',  'label' => 'Tạo Content',          'svg' => '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>'],
-            'POSTS'     => ['url' => '/posts',      'page' => 'posts',     'label' => 'Đăng bài & Lịch',      'svg' => '<svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>'],
+            'POSTS'     => ['url' => '/posts/facebook', 'page' => 'posts',  'label' => 'Đăng bài & Lịch', 'svg' => '<svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>'],
+            'POSTS_FB'  => ['url' => '/posts/facebook',   'page' => 'posts',   'label' => 'Facebook',    'sub' => true],
+            'POSTS_TT'  => ['url' => '/posts/tiktok',     'page' => 'posts',   'label' => 'TikTok',      'sub' => true],
+            'POSTS_IG'  => ['url' => '/posts/instagram',  'page' => 'posts',   'label' => 'Instagram',   'sub' => true],
+            'POSTS_THR' => ['url' => '/posts/threads',    'page' => 'posts',   'label' => 'Threads',     'sub' => true],
         ];
 
         $systemModules = [
@@ -52,11 +56,32 @@
         <div class="nav-section">
             <div class="nav-section-title">Khám phá</div>
             <?php foreach ($sidebarModules as $modCode => $m): ?>
-                <?php if (in_array($modCode, $enabledModules)): ?>
-                    <a href="<?= url($m['url']) ?>" class="nav-item <?= $currentPage === $m['page'] ? 'active' : '' ?>">
-                        <?= $m['svg'] ?>
+                <?php
+                $isSub = !empty($m['sub']);
+                $isEnabled = $isSub ? true : in_array($modCode, $enabledModules);
+                $isActive = $currentPage === $m['page'];
+                ?>
+                <?php if ($isEnabled): ?>
+                    <?php if ($isSub): ?>
+                    <?php // Sub-items hidden by default, shown via CSS when .posts-expanded ?>
+                    <a href="<?= url($m['url']) ?>" class="nav-item nav-item-sub">
+                        <?= e($m['label']) ?>
+                        <span class="sub-arrow">›</span>
+                    </a>
+                    <?php else: ?>
+                    <?php if ($modCode === 'POSTS'): ?>
+                    <button class="nav-item nav-main <?= $isActive ? 'active' : '' ?>" onclick="togglePostsSubmenu(this)">
+                        <?= isset($m['svg']) ? $m['svg'] : '' ?>
+                        <span><?= e($m['label']) ?></span>
+                        <span class="sub-arrow">▾</span>
+                    </button>
+                    <?php else: ?>
+                    <a href="<?= url($m['url']) ?>" class="nav-item <?= $isActive ? 'active' : '' ?>">
+                        <?= isset($m['svg']) ? $m['svg'] : '' ?>
                         <?= e($m['label']) ?>
                     </a>
+                    <?php endif; ?>
+                    <?php endif; ?>
                 <?php endif; ?>
             <?php endforeach; ?>
         </div>
@@ -186,5 +211,23 @@
 <?php foreach (($pageJs ?? []) as $jsFile): ?>
     <script src="<?= asset($jsFile) ?>"></script>
 <?php endforeach; ?>
+<script>
+(function() {
+    var path = window.location.pathname || '';
+    var nav = document.querySelector('.sidebar-nav');
+    if (nav) {
+        if (path.indexOf('/posts') === 0) {
+            nav.classList.add('posts-expanded');
+        }
+    }
+})();
+
+function togglePostsSubmenu(btn) {
+    var nav = document.querySelector('.sidebar-nav');
+    if (nav) {
+        nav.classList.toggle('posts-expanded');
+    }
+}
+</script>
 </body>
 </html>

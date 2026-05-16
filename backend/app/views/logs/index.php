@@ -19,17 +19,17 @@
                 <tbody>
                 <?php foreach ($logs as $log): ?>
                     <tr>
-                        <td>#<?= (int)$log['id'] ?></td>
-                        <td><strong><?= e((string)$log['task_name']) ?></strong></td>
-                        <td><?= status_badge((string)$log['status']) ?></td>
-                        <td>
+                        <td data-label="Mã">#<?= (int)$log['id'] ?></td>
+                        <td data-label="Tác vụ"><strong><?= e((string)$log['task_name']) ?></strong></td>
+                        <td data-label="Trạng thái"><?= status_badge((string)$log['status']) ?></td>
+                        <td data-label="Chi tiết">
                             <?php if (!empty($log['error_message'])): ?>
                                 <span class="text-danger text-sm"><?= e((string)$log['error_message']) ?></span>
                             <?php else: ?>
                                 <span class="text-muted text-sm">—</span>
                             <?php endif; ?>
                         </td>
-                        <td class="text-muted text-sm"><?= e((string)$log['created_at']) ?></td>
+                        <td data-label="Thời gian" class="text-muted text-sm"><?= e((string)$log['created_at']) ?></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>

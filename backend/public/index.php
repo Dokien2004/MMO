@@ -237,7 +237,9 @@ function isShopeeInterventionError(string $message): bool
 $routeModuleMap = [
     '/scraper'  => 'SCRAPER',  '/products' => 'PRODUCTS',
     '/links'    => 'LINKS',    '/contents' => 'CONTENTS',
-    '/posts'    => 'POSTS',    '/settings' => 'SETTINGS',
+    '/posts/facebook'    => 'POSTS',    '/posts/tiktok'     => 'POSTS',
+    '/settings'           => 'SETTINGS', '/posts/instagram' => 'POSTS',
+                                         '/posts/threads'  => 'POSTS',
     '/logs'     => 'LOGS',
     '/server-info' => 'SERVER_INFO',
     '/admin/modules' => 'ADMIN', '/admin/permissions' => 'ADMIN',
@@ -255,7 +257,8 @@ $getPermissionMap = [
     '/products' => 'products.view',
     '/links'    => 'links.view',
     '/contents' => 'contents.view',
-    '/posts'    => 'posts.view',
+    '/posts/facebook' => 'posts.view',  '/posts/tiktok'   => 'posts.view',
+    '/posts/instagram' => 'posts.view',  '/posts/threads'  => 'posts.view',
     '/settings' => 'settings.view',
     '/logs'     => 'logs.view',
 ];
@@ -552,6 +555,14 @@ if ($method === 'POST' && preg_match('#^/channels/publish/(\d+)$#', $path, $m)) 
                 $tiktokPublisher = new TikTokPublisher();
                 $result = $tiktokPublisher->publish($content, $channel);
                 break;
+            case 'instagram':
+                $igPublisher = new InstagramPublisher();
+                $result = $igPublisher->publish($content, $channel);
+                break;
+            case 'threads':
+                $threadsPublisher = new ThreadsPublisher();
+                $result = $threadsPublisher->publish($content, $channel);
+                break;
             default:
                 throw new InvalidArgumentException('Loại kênh không được hỗ trợ: ' . $channel['channel_type']);
         }
@@ -758,9 +769,11 @@ if ($method === 'POST') {
                 break;
 
             case '/contents/generate-all':
-                $provider = trim((string)($_POST['provider'] ?? 'template_engine'));
+                $defaultProvider = $automationSettings['default_content_provider'] ?? 'gemini';
+                $providerRaw = trim((string)($_POST['provider'] ?? ''));
+                $provider = $providerRaw !== '' ? $providerRaw : $defaultProvider;
                 $limit = max(1, min(20, (int)($_POST['limit'] ?? 5)));
-                $result = $contentService->generateForEligibleProducts($limit, $provider !== '' ? $provider : 'template_engine');
+                $result = $contentService->generateForEligibleProducts($limit, $provider);
                 json_response(true, 'Đã sinh ' . $result['count'] . ' draft content.');
                 break;
 
@@ -1339,14 +1352,24 @@ switch ($path) {
         ]);
         break;
 
-    case '/posts':
+    case '/posts/facebook':
+    case '/posts/tiktok':
+    case '/posts/instagram':
+    case '/posts/threads':
         $automationSettings = $automationSettingsService->get();
         $contents = $contentService->allContents();
         $postContents = [];
         foreach ($contents as $content) {
             $postContents[(int)$content['id']] = $content;
         }
-        render('posts/index', [
+        $platformMap = [
+            '/posts/facebook'   => 'posts/facebook',
+            '/posts/tiktok'     => 'posts/tiktok',
+            '/posts/instagram'  => 'posts/instagram',
+            '/posts/threads'    => 'posts/threads',
+        ];
+        $template = $platformMap[$path] ?? 'posts/index';
+        render($template, [
             'pageTitle'    => 'Đăng bài',
             'currentPage'  => 'posts',
             'postSummary'  => $postingService->summary(),

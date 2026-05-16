@@ -130,12 +130,12 @@ $contentsNeedVideo = array_values(array_filter($contents ?? [], static function 
                 <tbody>
                 <?php foreach ($productsNeedContent as $product): ?>
                     <tr>
-                        <td>
+                        <td data-label="Sản phẩm">
                             <strong class="item-title"><?= e((string)$product['product_name']) ?></strong>
                             <div class="sub">SP #<?= (int)$product['id'] ?> · <?= number_format((int)($product['sold_count'] ?? 0)) ?> đã bán</div>
                         </td>
-                        <td><button type="button" class="btn btn-ghost btn-sm" data-copy="<?= e((string)$product['affiliate_url']) ?>">Copy aff</button></td>
-                        <td>
+                        <td data-label="Affiliate"><button type="button" class="btn btn-ghost btn-sm" data-copy="<?= e((string)$product['affiliate_url']) ?>">Copy aff</button></td>
+                        <td data-label="Tạo content">
                             <form data-ajax method="POST" action="<?= url('/contents/generate') ?>">
                                 <input type="hidden" name="product_id" value="<?= (int)$product['id'] ?>">
                                 <input type="hidden" name="provider" value="<?= e($defaultProvider) ?>">
@@ -164,8 +164,8 @@ $contentsNeedVideo = array_values(array_filter($contents ?? [], static function 
                 <tbody>
                 <?php foreach ($contents as $content): ?>
                     <tr>
-                        <td>#<?= (int)$content['id'] ?><div class="sub">SP #<?= (int)$content['product_id'] ?></div></td>
-                        <td style="max-width:400px">
+                        <td data-label="Mã">#<?= (int)$content['id'] ?><div class="sub">SP #<?= (int)$content['product_id'] ?></div></td>
+                        <td data-label="Nội dung">
                             <strong><?= e((string)$content['title']) ?></strong>
                             <div class="sub" style="margin-top:4px"><?= e((string)$content['hashtags']) ?></div>
                             <div class="mono mt-8" style="max-height:80px;overflow:hidden"><?= e(mb_substr((string)$content['body'], 0, 200)) ?>…</div>
@@ -184,14 +184,14 @@ $contentsNeedVideo = array_values(array_filter($contents ?? [], static function 
                                 <div class="sub mt-8">Media: <?= e((string)($content['media_status'] ?? 'pending')) ?></div>
                             <?php endif; ?>
                         </td>
-                        <td>
+                        <td data-label="Nguồn sinh">
                             <span class="badge badge-active"><?= e((string)$content['ai_provider']) ?></span>
                             <?php if (!empty($content['media_type'] ?? '') && ($content['media_type'] ?? 'none') !== 'none'): ?>
                                 <div class="sub mt-8">Media: <?= e((string)$content['media_type']) ?></div>
                             <?php endif; ?>
                         </td>
-                        <td><?= status_badge((string)$content['status']) ?></td>
-                        <td>
+                        <td data-label="Trạng thái"><?= status_badge((string)$content['status']) ?></td>
+                        <td data-label="Thao tác">
                             <div class="btn-group">
                                 <?php if (empty($content['media_url'] ?? '') || ($content['media_type'] ?? 'none') === 'none'): ?>
                                     <form data-ajax method="POST" action="<?= url('/contents/generate-image') ?>">

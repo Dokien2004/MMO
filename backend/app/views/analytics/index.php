@@ -149,22 +149,20 @@ $rising = (int)($scoreSummary['rising_count'] ?? 0);
                     $aiInfo = $rec['ai_analysis'] ?? [];
                     ?>
                     <tr>
-                        <td>
+                        <td data-label="Sản phẩm">
                             <strong><?= e((string)($rec['product_name'] ?? '')) ?></strong>
                             <div class="sub"><?= e((string)($rec['source_platform'] ?? '')) ?></div>
                             <?php if (!empty($aiInfo['reasoning'])): ?>
                                 <div class="sub text-muted" style="font-size:11px;margin-top:2px;"><?= e((string)$aiInfo['reasoning']) ?></div>
                             <?php endif; ?>
                         </td>
-                        <td>
-                            <span style="font-weight:700;font-size:18px;color:<?= $scoreColor ?>"><?= $score ?></span>
-                        </td>
-                        <td><?= $recLabel ?></td>
-                        <td><?= $trendIcon ?> <?= e((string)($rec['trend_direction'] ?? 'stable')) ?></td>
-                        <td><span class="metric-pill"><?= number_format((float)($rec['sales_velocity'] ?? 0), 1) ?>/ngày</span></td>
-                        <td><?= number_format((float)($rec['price'] ?? 0), 0, ',', '.') ?>₫</td>
-                        <td><span class="metric-pill"><?= number_format((int)($rec['sold_count'] ?? 0)) ?></span></td>
-                        <td>
+                        <td data-label="Score"><span style="font-weight:700;font-size:18px;color:<?= $scoreColor ?>"><?= $score ?></span></td>
+                        <td data-label="Đánh giá"><?= $recLabel ?></td>
+                        <td data-label="Xu hướng"><?= $trendIcon ?> <?= e((string)($rec['trend_direction'] ?? 'stable')) ?></td>
+                        <td data-label="Vận tốc"><span class="metric-pill"><?= number_format((float)($rec['sales_velocity'] ?? 0), 1) ?>/ngày</span></td>
+                        <td data-label="Giá"><?= number_format((float)($rec['price'] ?? 0), 0, ',', '.') ?>₫</td>
+                        <td data-label="Đã bán"><span class="metric-pill"><?= number_format((int)($rec['sold_count'] ?? 0)) ?></span></td>
+                        <td data-label="Chọn">
                             <button class="btn btn-sm btn-primary" onclick="pickProduct(<?= (int)($rec['product_id'] ?? $rec['id'] ?? 0) ?>)" style="font-size:11px;padding:4px 10px;">🎯 Chọn</button>
                         </td>
                     </tr>

@@ -87,6 +87,7 @@ final class DatabaseStorage
                 }
 
                 $this->replaceRows($fileName, $rowsToPersist);
+                $this->pdo->commit();
 
                 return $returnValue;
             } catch (Throwable $throwable) {
@@ -94,6 +95,8 @@ final class DatabaseStorage
                     $this->pdo->rollBack();
                 }
                 throw $throwable;
+            } finally {
+                $this->releaseLock($lockName);
             }
         } finally {
             $this->releaseLock($lockName);
@@ -426,10 +429,5 @@ SQL);
     {
         $stmt = $this->pdo->prepare('SELECT RELEASE_LOCK(:lock_name)');
         $stmt->execute([':lock_name' => $lockName]);
-    }
-
-    public function isInTransaction(): bool
-    {
-        return $this->pdo->inTransaction();
     }
 }
