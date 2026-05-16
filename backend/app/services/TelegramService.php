@@ -22,19 +22,41 @@ class TelegramService
     }
 
     /**
+     * Lấy username của bot (dùng cho deep link t.me/BOT_USERNAME).
+     */
+    public function getBotUsername(): string
+    {
+        if ($this->botToken === '') return '';
+        $url = "https://api.telegram.org/bot{$this->botToken}/getMe";
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 5,
+        ]);
+        $response = curl_exec($ch);
+        curl_close($ch);
+        if (!is_string($response)) return '';
+        $data = json_decode($response, true);
+        return (string)($data['result']['username'] ?? '');
+    }
+
+    /**
      * Gửi tin nhắn text.
      * @param string $text Nội dung (hỗ trợ emoji, không cần escape markdown)
+     * @param string|null $targetChatId Nếu null sẽ gửi tới chat_id mặc định của hệ thống
      */
-    public function sendMessage(string $text): bool
+    public function sendMessage(string $text, ?string $targetChatId = null): bool
     {
-        if (!$this->isConfigured()) {
+        $destId = $targetChatId ?? $this->chatId;
+        
+        if ($this->botToken === '' || $destId === '') {
             error_log('[Telegram] Not configured (missing bot_token or chat_id)');
             return false;
         }
 
         $url = "https://api.telegram.org/bot{$this->botToken}/sendMessage";
         $payload = [
-            'chat_id'    => $this->chatId,
+            'chat_id'    => $destId,
             'text'       => $text,
             'parse_mode' => 'HTML',
         ];
@@ -52,7 +74,7 @@ class TelegramService
         curl_close($ch);
 
         if ($httpCode !== 200) {
-            error_log('[Telegram] sendMessage failed, HTTP ' . $httpCode . ': ' . $response);
+            error_log('[Telegram] sendMessage failed to ' . $destId . ', HTTP ' . $httpCode . ': ' . $response);
             return false;
         }
 
@@ -65,7 +87,8 @@ class TelegramService
     public function sendCaptchaAlert(
         string $rustdeskId,
         string $rustdeskPassword,
-        string $shopeeSessionStatus = 'chưa rõ'
+        string $shopeeSessionStatus = 'chưa rõ',
+        ?string $targetChatId = null
     ): bool {
         $msg = "🔴 <b>CẦN XÁC MINH CAPTCHA SHOPEE</b>\n\n";
         $msg .= "⚠️ Trình duyệt Shopee cần xác minh captcha.\n";
@@ -75,11 +98,16 @@ class TelegramService
         $msg .= "Pass: <code>{$rustdeskPassword}</code>\n\n";
         $msg .= "Vào RustDesk → nhập ID → đăng nhập → xác minh captcha trên trình duyệt đang mở.";
 
-        return $this->sendMessage($msg);
+        return $this->sendMessage($msg, $targetChatId);
     }
 
-    public function sendScrapeInterventionRequest(string $jobId, string $rustdeskId, string $rustdeskPassword, string $reason = ''): bool
-    {
+    public function sendScrapeInterventionRequest(
+        string $jobId,
+        string $rustdeskId,
+        string $rustdeskPassword,
+        string $reason = '',
+        ?string $targetChatId = null
+    ): bool {
         $msg = "🟡 <b>CHỜ KIÊN XÁC NHẬN ĐỂ CÀO SHOPEE</b>\n\n";
         $msg .= "Job: <code>{$jobId}</code>\n";
         if ($reason !== '') {
@@ -95,12 +123,12 @@ class TelegramService
         $msg .= "4) Nhắn lại bot đúng chữ: <b>xong</b>\n\n";
         $msg .= "Sau khi nhận chữ <b>xong</b>, bot sẽ tự bắt đầu cào dữ liệu.";
 
-        return $this->sendMessage($msg);
+        return $this->sendMessage($msg, $targetChatId);
     }
 
     public function getUpdates(int $offset = 0, int $timeout = 20): array
     {
-        if (!$this->isConfigured()) {
+        if ($this->botToken === '') {
             return [];
         }
 
@@ -145,20 +173,20 @@ class TelegramService
     /**
      * Gửi thông báo scraper bắt đầu / kết thúc.
      */
-    public function sendScraperUpdate(string $message): bool
+    public function sendScraperUpdate(string $message, ?string $targetChatId = null): bool
     {
-        return $this->sendMessage("📦 <b>Scraper Update</b>\n\n{$message}");
+        return $this->sendMessage("📦 <b>Scraper Update</b>\n\n{$message}", $targetChatId);
     }
 
     /**
      * Gửi thông báo lỗi nghiêm trọng.
      */
-    public function sendAlert(string $title, string $details = ''): bool
+    public function sendAlert(string $title, string $details = '', ?string $targetChatId = null): bool
     {
         $msg = "🚨 <b>{$title}</b>";
         if ($details !== '') {
             $msg .= "\n\n{$details}";
         }
-        return $this->sendMessage($msg);
+        return $this->sendMessage($msg, $targetChatId);
     }
 }

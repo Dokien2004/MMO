@@ -209,4 +209,13 @@ class UserService
         );
         $stmt->execute([':uid' => $userId, ':sid' => $siteId]);
     }
+
+    /**
+     * Cập nhật Telegram Chat ID cho user.
+     */
+    public function updateTelegramChatId(int $userId, string $chatId): bool
+    {
+        $stmt = $this->pdo->prepare("UPDATE users SET telegram_chat_id = :chat_id WHERE id = :id");
+        return $stmt->execute([':chat_id' => $chatId, ':id' => $userId]);
+    }
 }

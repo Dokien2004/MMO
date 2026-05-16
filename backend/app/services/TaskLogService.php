@@ -39,16 +39,18 @@ final class TaskLogService
         });
     }
 
-    public function recent(int $limit = 10): array
+    public function recent(int $limit = 10, bool $global = false): array
     {
+        $where = $global ? '' : 'WHERE site_id = :site_id';
         $stmt = $this->pdo->prepare(
             'SELECT *
-             FROM affiliate_task_logs
-             WHERE site_id = :site_id
+             FROM affiliate_task_logs ' . $where . '
              ORDER BY id DESC
              LIMIT :lim'
         );
-        $stmt->bindValue(':site_id', currentSiteId(), PDO::PARAM_INT);
+        if (!$global) {
+            $stmt->bindValue(':site_id', currentSiteId(), PDO::PARAM_INT);
+        }
         $stmt->bindValue(':lim', $limit, PDO::PARAM_INT);
         $stmt->execute();
         $logs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];

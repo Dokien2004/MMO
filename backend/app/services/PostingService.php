@@ -323,18 +323,22 @@ final class PostingService
         return array_slice($this->allPosts(), 0, $limit);
     }
 
-    public function summary(): array
+    public function summary(bool $global = false): array
     {
+        $where = $global ? '' : 'WHERE site_id = :site_id';
         $stmt = $this->pdo->prepare(
             'SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN status = \'scheduled\' THEN 1 ELSE 0 END) AS scheduled_count,
                 SUM(CASE WHEN status = \'success\' THEN 1 ELSE 0 END) AS success_count,
                 SUM(CASE WHEN status = \'failed\' THEN 1 ELSE 0 END) AS failed_count
-             FROM scheduled_posts
-             WHERE site_id = :site_id'
+             FROM scheduled_posts ' . $where
         );
-        $stmt->execute([':site_id' => currentSiteId()]);
+        $params = [];
+        if (!$global) {
+            $params[':site_id'] = currentSiteId();
+        }
+        $stmt->execute($params);
         $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
         return [

@@ -366,18 +366,6 @@
                 <button type="button" class="btn btn-success" data-post-action="<?= url('/settings/check-facebook-token') ?>">Kiểm tra token</button>
             </div>
 
-            <div class="grid-2 compact-grid mt-16">
-                <div class="form-group">
-                    <label class="form-label">Telegram Bot Token</label>
-                    <input class="form-control" type="password" name="TELEGRAM_BOT_TOKEN" placeholder="<?= e((string)($integrationConfig['TELEGRAM_BOT_TOKEN_MASKED'] ?? 'Chưa cấu hình')) ?>" autocomplete="off">
-                    <div class="sub">Dùng để báo khi job tạo ảnh AI chạy nền hoàn tất.</div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Telegram Chat ID</label>
-                    <input class="form-control" name="TELEGRAM_CHAT_ID" value="<?= e((string)($integrationConfig['TELEGRAM_CHAT_ID'] ?? '')) ?>" placeholder="VD: 6861841372" autocomplete="off">
-                </div>
-            </div>
-
             <div class="grid-2 compact-grid">
                 <div class="form-group">
                     <label class="form-label">Shopee Affiliate ID</label>

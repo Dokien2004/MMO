@@ -198,7 +198,7 @@ function site_integration_default_for_site(string $key, string $default, int $si
     $siteSpecificKeys = [
         'OPENAI_API_KEY', 'GEMINI_API_KEY', 'FACEBOOK_PAGE_ID', 'FACEBOOK_PAGE_ACCESS_TOKEN',
         'IMAGE_OPENAI_API_KEY', 'MEIGEN_API_TOKEN', 'VIDEO_API_KEY', 'KLING_ACCESS_KEY', 'KLING_SECRET_KEY',
-        'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'PRODUCT_IMPORT_TOKEN', 'SHOPEE_AFFILIATE_ID',
+        'PRODUCT_IMPORT_TOKEN', 'SHOPEE_AFFILIATE_ID',
     ];
 
     if ($siteId !== APP_SITE_ID && in_array($key, $siteSpecificKeys, true)) {

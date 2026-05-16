@@ -206,8 +206,9 @@ final class ProductSyncService
         return array_slice($this->allProducts(), 0, $limit);
     }
 
-    public function dashboardSummary(): array
+    public function dashboardSummary(bool $global = false): array
     {
+        $where = $global ? '' : 'WHERE site_id = :site_id';
         $stmt = $this->pdo->prepare(
             'SELECT
                 COUNT(*) AS total,
@@ -218,10 +219,13 @@ final class ProductSyncService
                 SUM(CASE WHEN status = \'archived\' THEN 1 ELSE 0 END) AS archived_count,
                 SUM(CASE WHEN sold_count >= 50 THEN 1 ELSE 0 END) AS high_demand,
                 MAX(sold_count) AS max_sold_count
-             FROM affiliate_products
-             WHERE site_id = :site_id'
+             FROM affiliate_products ' . $where
         );
-        $stmt->execute([':site_id' => currentSiteId()]);
+        $params = [];
+        if (!$global) {
+            $params[':site_id'] = currentSiteId();
+        }
+        $stmt->execute($params);
         $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
         return [
@@ -236,16 +240,18 @@ final class ProductSyncService
         ];
     }
 
-    public function topSellingProducts(int $limit = 5, int $minSoldCount = 0): array
+    public function topSellingProducts(int $limit = 5, int $minSoldCount = 0, bool $global = false): array
     {
+        $where = $global ? 'WHERE sold_count >= :min_sold_count' : 'WHERE site_id = :site_id AND sold_count >= :min_sold_count';
         $stmt = $this->pdo->prepare(
             'SELECT *
-             FROM affiliate_products
-             WHERE site_id = :site_id AND sold_count >= :min_sold_count
+             FROM affiliate_products ' . $where . '
              ORDER BY sold_count DESC, updated_at DESC
              LIMIT :lim'
         );
-        $stmt->bindValue(':site_id', currentSiteId(), PDO::PARAM_INT);
+        if (!$global) {
+            $stmt->bindValue(':site_id', currentSiteId(), PDO::PARAM_INT);
+        }
         $stmt->bindValue(':min_sold_count', $minSoldCount, PDO::PARAM_INT);
         $stmt->bindValue(':lim', $limit, PDO::PARAM_INT);
         $stmt->execute();

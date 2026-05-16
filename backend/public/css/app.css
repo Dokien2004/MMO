@@ -265,6 +265,23 @@ a:hover { color: var(--accent-light); }
     color: var(--text-muted);
 }
 
+a.sidebar-user-avatar,
+a.sidebar-user-name {
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    transition: var(--transition);
+}
+
+a.sidebar-user-avatar:hover {
+    filter: brightness(1.2);
+    transform: scale(1.05);
+}
+
+a.sidebar-user-name:hover {
+    color: var(--accent);
+}
+
 .sidebar-logout {
     color: var(--text-muted);
     text-decoration: none;
