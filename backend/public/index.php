@@ -110,21 +110,6 @@ if ($path === '/health') {
     exit;
 }
 
-// ── Channel API (single channel fetch) — before auth middleware ──
-if (preg_match('#^/api/channels/(\d+)$#', $path, $m)) {
-    if (!isLoggedIn()) {
-        http_response_code(401);
-        json_response(false, 'Chưa đăng nhập.');
-    }
-    header('Content-Type: application/json');
-    $item = $channelService->findById((int)$m[1]);
-    if (!$item) {
-        echo json_encode(['success' => false, 'message' => 'Không tìm thấy kênh.'], JSON_UNESCAPED_UNICODE);
-    } else {
-        echo json_encode(['success' => true, 'data' => $item], JSON_UNESCAPED_UNICODE);
-    }
-    exit;
-}
 
 
 // ══════════════════════════════════════════
