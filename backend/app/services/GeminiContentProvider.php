@@ -9,30 +9,27 @@ final class GeminiContentProvider
         return OPENAI_BASE_URL !== '';
     }
 
-    public function generate(array $product): array
+    public function generate(array $product, string $socialPlatform = ''): array
     {
         if (!OPENAI_BASE_URL) {
             throw new RuntimeException('OPENAI_BASE_URL (9router) chua duoc cau hinh.');
         }
 
         $promptService = new PromptTemplateService();
-        $userMsg = $promptService->renderForProduct('content_text', $product)
-            ?? $this->buildPrompt($product);
+        $systemMsg = $promptService->systemPromptFor('content_text', $socialPlatform)
+            ?? 'Ban la copywriter affiliate tieng Viet. Tra loi CHI json hop le, khong markdown, voi cac key: title, body, hashtags, call_to_action. Body 120-220 tu, 4-8 hashtag, CTA ngan.';
+        $platformArg = $socialPlatform !== '' ? $socialPlatform : null;
+        $userMsg = $promptService->renderForProduct('content_text', $product, [], $platformArg)
+            ?? $this->buildPrompt($product, $socialPlatform);
 
         $model = 'gemini/' . str_replace('gemini/', '', gemini_model());
 
         $payload = [
             'model' => $model,
-            'messages' => [
-                [
-                    'role' => 'system',
-                    'content' => "Ban la copywriter affiliate tieng Viet. Tra loi CHI json hop le, khong markdown, voi cac key: title, body, hashtags, call_to_action. Body 120-220 tu, 4-8 hashtag, CTA ngan.",
-                ],
-                [
-                    'role' => 'user',
-                    'content' => $userMsg,
-                ],
-            ],
+            'messages' => array_filter([
+                $systemMsg ? ['role' => 'system', 'content' => $systemMsg] : null,
+                ['role' => 'user', 'content' => $userMsg],
+            ]),
             'temperature' => 0.8,
             'max_tokens' => 2048,
             'stream' => false,
@@ -83,7 +80,9 @@ final class GeminiContentProvider
         return [
             'title' => trim((string)($structured['title'] ?? '')),
             'body' => trim((string)($structured['body'] ?? '')),
-            'hashtags' => trim((string)($structured['hashtags'] ?? '')),
+            'hashtags' => is_array($structured['hashtags'] ?? null)
+                ? implode(' ', $structured['hashtags'])
+                : trim((string)($structured['hashtags'] ?? '')),
             'call_to_action' => trim((string)($structured['call_to_action'] ?? '')),
             'notes' => 'Sinh boi Gemini qua 9router (' . gemini_model() . ')',
         ];
@@ -98,20 +97,31 @@ final class GeminiContentProvider
         return is_array($decoded) ? $decoded : null;
     }
 
-    private function buildPrompt(array $product): string
+    private function buildPrompt(array $product, string $socialPlatform = ''): string
     {
         $price = number_format((float)($product['price'] ?? 0), 0, ',', '.');
         $soldCount = number_format((int)($product['sold_count'] ?? 0));
 
+        $platformTarget = $socialPlatform !== '' ? $socialPlatform : ($product['source_platform'] ?? '');
+        $platformContext = match ($socialPlatform) {
+            'facebook' => 'Viet cho Facebook Fanpage — bai viet ban cam xuc, coi de, khuyen khich chia se.',
+            'tiktok'   => 'Viet cho TikTok — noi dung ngan gon, catchy, phu hop voi xu huong trending, nhac nho di vao link mo ta.',
+            'instagram'=> 'Viet cho Instagram — caption dep, use story telling, hashtag trending, emoji.',
+            'threads'  => 'Viet cho Threads — noi dung chat che, than thiet, quan diem ca nhan, khuyen khich binh luan.',
+            default    => 'Viet noi dung de post Fanpage.',
+        };
+
         return implode("\n", [
-            'Ban la copywriter affiliate tieng Viet. Hay viet content tu dong theo san pham de dang Fanpage.',
+            'Ban la copywriter affiliate tieng Viet.',
+            $platformContext,
             'Chi tra ve JSON hop le, khong markdown, voi cac key: title, body, hashtags, call_to_action.',
             '',
             'Thong tin san pham:',
             '- Ten: ' . ($product['product_name'] ?? ''),
             '- Gia: ' . $price . ' VND',
             '- Luot mua/ban: ' . $soldCount,
-            '- Nen tang: ' . ($product['source_platform'] ?? ''),
+            '- Nen tang ban hang: ' . ($product['source_platform'] ?? ''),
+            '- Mang xa hoi dich: ' . $platformTarget,
             '- Link affiliate: ' . ($product['affiliate_url'] ?? ''),
             '- Ghi chu: ' . ($product['notes'] ?? ''),
             '',

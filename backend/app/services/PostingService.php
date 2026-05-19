@@ -42,7 +42,7 @@ final class PostingService
         $this->channelService = new SocialChannelService();
     }
 
-    public function schedulePost(int $contentId, string $channel = 'fanpage_manual', ?string $scheduledAt = null, ?int $socialChannelId = null): array
+    public function schedulePost(int $contentId, string $channel = 'fanpage_manual', ?string $scheduledAt = null, ?int $socialChannelId = null, string $mediaType = 'auto'): array
     {
         $content = $this->contentService->findById($contentId);
         if ($content === null) {
@@ -54,7 +54,7 @@ final class PostingService
         }
 
         $scheduledTime = $this->normalizeScheduledAt($scheduledAt);
-        $record = $this->storage->mutate($this->fileName, function (array $posts) use ($content, $contentId, $channel, $scheduledTime, $socialChannelId): array {
+        $record = $this->storage->mutate($this->fileName, function (array $posts) use ($content, $contentId, $channel, $scheduledTime, $socialChannelId, $mediaType): array {
             $existing = $this->findByContentIdInRows($posts, $contentId);
             $record = [
                 'id' => $existing['id'] ?? $this->nextId($posts),
@@ -63,6 +63,7 @@ final class PostingService
                 'product_id' => (int)$content['product_id'],
                 'channel' => $channel,
                 'social_channel_id' => $socialChannelId ?? (($existing['social_channel_id'] ?? null) !== null ? (int)$existing['social_channel_id'] : null),
+                'media_type' => $mediaType,
                 'scheduled_at' => $scheduledTime,
                 'status' => 'scheduled',
                 'posted_at' => $existing['posted_at'] ?? null,
@@ -99,6 +100,27 @@ final class PostingService
     public function markFailed(int $postId, string $resultNote = ''): array
     {
         return $this->changePostStatus($postId, 'failed', $resultNote !== '' ? $resultNote : 'Dang bai that bai');
+    }
+
+    public function updatePostMediaType(int $postId, string $mediaType): array
+    {
+        return $this->storage->mutate($this->fileName, function (array $posts) use ($postId, $mediaType): array {
+            foreach ($posts as &$post) {
+                if ((int)($post['id'] ?? 0) !== $postId) {
+                    continue;
+                }
+                $post['media_type'] = $mediaType;
+                $post['updated_at'] = date('c');
+
+                return [
+                    'rows' => $this->sortPosts($posts),
+                    'result' => $post,
+                ];
+            }
+            unset($post);
+
+            throw new InvalidArgumentException('Khong tim thay bai dang de cap nhat media_type.');
+        });
     }
 
     public function publishPost(int $postId): array
@@ -243,7 +265,7 @@ final class PostingService
         ];
     }
 
-    public function scheduleForApprovedContents(int $limit = 10, string $channel = 'fanpage_manual', ?string $startAt = null, int $intervalMinutes = 15): array
+    public function scheduleForApprovedContents(int $limit = 10, string $channel = 'fanpage_manual', ?string $startAt = null, int $intervalMinutes = 15, string $mediaType = 'auto'): array
     {
         $contents = $this->contentService->allContents();
         $ids = [];
@@ -263,10 +285,10 @@ final class PostingService
             }
         }
 
-        return $this->scheduleSelectedContents($ids, $channel, $startAt, $intervalMinutes);
+        return $this->scheduleSelectedContents($ids, $channel, $startAt, $intervalMinutes, $mediaType);
     }
 
-    public function scheduleSelectedContents(array $contentIds, string $channel = 'fanpage_manual', ?string $startAt = null, int $intervalMinutes = 15): array
+    public function scheduleSelectedContents(array $contentIds, string $channel = 'fanpage_manual', ?string $startAt = null, int $intervalMinutes = 15, string $mediaType = 'auto'): array
     {
         $contentIds = array_values(array_unique(array_filter(array_map('intval', $contentIds), static fn(int $id): bool => $id > 0)));
         if (empty($contentIds)) {
@@ -281,7 +303,7 @@ final class PostingService
         foreach ($contentIds as $index => $contentId) {
             $scheduledAt = date('c', $startTimestamp + ($index * $intervalMinutes * 60));
             try {
-                $scheduled[] = $this->schedulePost($contentId, $channel, $scheduledAt);
+                $scheduled[] = $this->schedulePost($contentId, $channel, $scheduledAt, null, $mediaType);
             } catch (Throwable $throwable) {
                 $errors[] = [
                     'content_id' => $contentId,

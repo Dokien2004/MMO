@@ -21,12 +21,12 @@ final class DatabaseStorage
         ],
         'generated_contents.json' => [
             'table' => 'generated_contents',
-            'columns' => ['id', 'site_id', 'product_id', 'affiliate_link_id', 'title', 'body', 'hashtags', 'call_to_action', 'ai_provider', 'media_type', 'media_url', 'media_prompt', 'media_status', 'status', 'notes', 'created_at', 'updated_at'],
+            'columns' => ['id', 'site_id', 'product_id', 'affiliate_link_id', 'title', 'body', 'hashtags', 'call_to_action', 'ai_provider', 'media_type', 'media_url', 'media_prompt', 'media_status', 'status', 'notes', 'platform', 'channel_type', 'image_url', 'image_type', 'image_prompt', 'image_status', 'video_url', 'video_type', 'video_prompt', 'video_status', 'created_at', 'updated_at'],
             'json' => [],
         ],
         'scheduled_posts.json' => [
             'table' => 'scheduled_posts',
-            'columns' => ['id', 'site_id', 'content_id', 'product_id', 'channel', 'social_channel_id', 'scheduled_at', 'posted_at', 'status', 'result_note', 'remote_post_id', 'created_at', 'updated_at'],
+            'columns' => ['id', 'site_id', 'content_id', 'product_id', 'channel', 'social_channel_id', 'media_type', 'scheduled_at', 'posted_at', 'status', 'result_note', 'remote_post_id', 'created_at', 'updated_at'],
             'json' => [],
         ],
         'task_logs.json' => [
@@ -69,9 +69,20 @@ final class DatabaseStorage
     {
         $lockName = $this->lockName($fileName);
         $this->acquireLock($lockName);
+        $txStarted = false;
 
         try {
-            $this->pdo->beginTransaction();
+            try {
+                $this->pdo->beginTransaction();
+            } catch (PDOException $e) {
+                if (strpos($e->getMessage(), 'already active') !== false) {
+                    $this->pdo->rollBack();
+                    $this->pdo->beginTransaction();
+                } else {
+                    throw $e;
+                }
+            }
+            $txStarted = true;
             try {
                 $rows = $this->readRows($fileName);
                 $mutation = $callback($rows);
@@ -86,11 +97,30 @@ final class DatabaseStorage
                     throw new InvalidArgumentException('Mutation callback must return rows or [rows, result].');
                 }
 
+                // Transaction may be lost mid-flight (e.g., due to connection reset during long AI calls).
+                // Safely recover by starting a new transaction if needed.
+                if (!$this->pdo->inTransaction()) {
+                    if ($txStarted) {
+                        try {
+                            $this->pdo->beginTransaction();
+                        } catch (PDOException $e2) {
+                            if (strpos($e2->getMessage(), 'already active') !== false) {
+                                $this->pdo->rollBack();
+                                $this->pdo->beginTransaction();
+                            } else {
+                                throw $e2;
+                            }
+                        }
+                    }
+                }
                 $this->replaceRows($fileName, $rowsToPersist);
+                if ($this->pdo->inTransaction()) {
+                    $this->pdo->commit();
+                }
 
                 return $returnValue;
             } catch (Throwable $throwable) {
-                if ($this->pdo->inTransaction()) {
+                if ($txStarted && $this->pdo->inTransaction()) {
                     $this->pdo->rollBack();
                 }
                 throw $throwable;
@@ -347,6 +377,8 @@ SQL);
         $this->ensureColumn('generated_contents', 'media_url', "VARCHAR(2000) NOT NULL DEFAULT '' AFTER media_type");
         $this->ensureColumn('generated_contents', 'media_prompt', 'TEXT NULL AFTER media_url');
         $this->ensureColumn('generated_contents', 'media_status', "VARCHAR(30) NOT NULL DEFAULT 'none' AFTER media_prompt");
+        $this->ensureColumn('generated_contents', 'platform', "ENUM('facebook','instagram','tiktok','threads','general') DEFAULT 'general' AFTER status");
+        $this->ensureColumn('generated_contents', 'channel_type', "ENUM('facebook','instagram','tiktok','threads','general') DEFAULT 'general' AFTER platform");
         $this->ensureColumn('scheduled_posts', 'social_channel_id', 'INT UNSIGNED NULL AFTER channel');
     }
 

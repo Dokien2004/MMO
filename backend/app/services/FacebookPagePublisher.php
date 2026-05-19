@@ -4,14 +4,24 @@ declare(strict_types=1);
 
 final class FacebookPagePublisher
 {
-    public function isAvailable(): bool
+    private function resolveChannelId(?array $channel): string
     {
-        return facebook_page_id() !== '' && facebook_page_access_token() !== '';
+        return ($channel['channel_id'] ?? '') !== '' ? (string)$channel['channel_id'] : facebook_page_id();
     }
 
-    public function checkToken(): array
+    private function resolveAccessToken(?array $channel): string
     {
-        if (!$this->isAvailable()) {
+        return ($channel['access_token'] ?? '') !== '' ? (string)$channel['access_token'] : facebook_page_access_token();
+    }
+
+    public function isAvailable(?array $channel = null): bool
+    {
+        return $this->resolveChannelId($channel) !== '' && $this->resolveAccessToken($channel) !== '';
+    }
+
+    public function checkToken(?array $channel = null): array
+    {
+        if (!$this->isAvailable($channel)) {
             return [
                 'ok' => false,
                 'message' => 'Chưa cấu hình Facebook Page ID hoặc Page Access Token.',
@@ -20,12 +30,15 @@ final class FacebookPagePublisher
             ];
         }
 
+        $pageId = $this->resolveChannelId($channel);
+        $token  = $this->resolveAccessToken($channel);
+
         $identityUrl = sprintf(
             'https://graph.facebook.com/%s/me?%s',
             FACEBOOK_GRAPH_VERSION,
             http_build_query([
                 'fields' => 'id,name',
-                'access_token' => facebook_page_access_token(),
+                'access_token' => $token,
             ])
         );
         $identity = $this->graphGet($identityUrl);
@@ -34,13 +47,13 @@ final class FacebookPagePublisher
         }
 
         $tokenOwnerId = (string)($identity['data']['id'] ?? '');
-        if ($tokenOwnerId !== '' && $tokenOwnerId !== facebook_page_id()) {
+        if ($tokenOwnerId !== '' && $tokenOwnerId !== $pageId) {
             return [
                 'ok' => false,
                 'message' => 'Token hiện tại là User Token/App Token, chưa phải Page Access Token. Cần lấy token Page từ: /me/accounts → Page Ép Phê → access_token, rồi dán access_token đó vào ô Facebook Page Access Token.',
                 'token_owner_id' => $tokenOwnerId,
                 'token_owner_name' => (string)($identity['data']['name'] ?? ''),
-                'page_id' => facebook_page_id(),
+                'page_id' => $pageId,
                 'code' => null,
                 'subcode' => null,
             ];
@@ -49,10 +62,10 @@ final class FacebookPagePublisher
         $url = sprintf(
             'https://graph.facebook.com/%s/%s?%s',
             FACEBOOK_GRAPH_VERSION,
-            rawurlencode(facebook_page_id()),
+            rawurlencode($pageId),
             http_build_query([
                 'fields' => 'id,name,can_post',
-                'access_token' => facebook_page_access_token(),
+                'access_token' => $token,
             ])
         );
 
@@ -67,9 +80,9 @@ final class FacebookPagePublisher
         return [
             'ok' => $canPost,
             'message' => $canPost
-                ? 'Token Facebook còn dùng được cho Page: ' . (string)($decoded['name'] ?? facebook_page_id())
+                ? 'Token Facebook còn dùng được cho Page: ' . (string)($decoded['name'] ?? $pageId)
                 : 'Token đọc được Page nhưng chưa thấy quyền đăng bài. Cần lấy token Page từ: /me/accounts → Page Ép Phê → access_token.',
-            'page_id' => (string)($decoded['id'] ?? facebook_page_id()),
+            'page_id' => (string)($decoded['id'] ?? $pageId),
             'page_name' => (string)($decoded['name'] ?? ''),
             'can_post' => $canPost,
             'code' => null,
@@ -77,71 +90,9 @@ final class FacebookPagePublisher
         ];
     }
 
-    private function graphGet(string $url): array
+    public function publish(array $content, array $post = [], ?array $channel = null): array
     {
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => FACEBOOK_TIMEOUT_SECONDS,
-        ]);
-        $response = curl_exec($ch);
-        $curlError = curl_error($ch);
-        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($response === false) {
-            return [
-                'ok' => false,
-                'message' => 'Lỗi curl Facebook: ' . $curlError,
-                'code' => null,
-                'subcode' => null,
-            ];
-        }
-
-        $decoded = json_decode($response, true);
-        if (!is_array($decoded)) {
-            return [
-                'ok' => false,
-                'message' => 'Không giải mã được response Facebook Graph API.',
-                'code' => null,
-                'subcode' => null,
-            ];
-        }
-
-        if ($httpCode >= 400 || isset($decoded['error'])) {
-            $error = is_array($decoded['error'] ?? null) ? $decoded['error'] : [];
-            $message = (string)($error['message'] ?? ('HTTP ' . $httpCode));
-            $code = (int)($error['code'] ?? 0);
-            $subcode = (int)($error['error_subcode'] ?? 0);
-
-            if ($code === 190 && $subcode === 463) {
-                $message = 'Facebook Page Access Token đã hết hạn. Cần tạo/lưu token Page mới.';
-            } elseif ($code === 190) {
-                $message = 'Facebook Page Access Token không hợp lệ hoặc đã hết hạn: ' . $message;
-            } elseif (str_contains(strtolower($message), 'publish_actions')) {
-                $message = 'Token/App đang đụng quyền cũ publish_actions đã bị Facebook khai tử. Không cần quyền này. Cần lấy token Page từ: /me/accounts → Page Ép Phê → access_token, rồi dán access_token đó vào ô Facebook Page Access Token.';
-            }
-
-            return [
-                'ok' => false,
-                'message' => $message,
-                'code' => $code ?: null,
-                'subcode' => $subcode ?: null,
-            ];
-        }
-
-        return [
-            'ok' => true,
-            'message' => 'Facebook Graph API OK.',
-            'data' => $decoded,
-            'code' => null,
-            'subcode' => null,
-        ];
-    }
-
-    public function publish(array $content, array $post): array
-    {
-        if (!$this->isAvailable()) {
+        if (!$this->isAvailable($channel)) {
             throw new RuntimeException('FACEBOOK_PAGE_ID hoac FACEBOOK_PAGE_ACCESS_TOKEN chua duoc cau hinh.');
         }
 
@@ -152,7 +103,7 @@ final class FacebookPagePublisher
             (string)($content['hashtags'] ?? ''),
         ])));
 
-        [$endpoint, $fields] = $this->buildPublishRequest($content, $message);
+        [$endpoint, $fields] = $this->buildPublishRequest($content, $message, $channel);
 
         $ch = curl_init($endpoint);
         curl_setopt_array($ch, [
@@ -187,13 +138,15 @@ final class FacebookPagePublisher
         ];
     }
 
-    public function commentOnPost(string $remotePostId, string $message): array
+    public function commentOnPost(string $remotePostId, string $message, ?array $channel = null): array
     {
         $remotePostId = trim($remotePostId);
         $message = trim($message);
         if ($remotePostId === '' || $message === '') {
             throw new InvalidArgumentException('Thieu Facebook post ID hoac noi dung comment.');
         }
+
+        $token = $this->resolveAccessToken($channel);
 
         $ch = curl_init(sprintf(
             'https://graph.facebook.com/%s/%s/comments',
@@ -205,7 +158,7 @@ final class FacebookPagePublisher
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => http_build_query([
                 'message' => $message,
-                'access_token' => facebook_page_access_token(),
+                'access_token' => $token,
             ]),
             CURLOPT_TIMEOUT => FACEBOOK_TIMEOUT_SECONDS,
         ]);
@@ -235,30 +188,47 @@ final class FacebookPagePublisher
         ];
     }
 
-    private function buildPublishRequest(array $content, string $message): array
+    private function buildPublishRequest(array $content, string $message, ?array $channel = null): array
     {
-        $mediaType = (string)($content['media_type'] ?? 'none');
-        $mediaUrl = trim((string)($content['media_url'] ?? ''));
+        $token = $this->resolveAccessToken($channel);
+
+        $mediaType = (string)($post['media_type'] ?? 'auto');
+        if ($mediaType === 'auto') {
+            if (!empty($content['video_url'])) {
+                $mediaType = 'video';
+            } elseif (!empty($content['image_url'])) {
+                $mediaType = 'image';
+            } else {
+                $mediaType = 'none';
+            }
+        }
+
+        $mediaUrl = '';
+        if ($mediaType === 'video' && !empty($content['video_url'])) {
+            $mediaUrl = $content['video_url'];
+        } elseif ($mediaType === 'image' && !empty($content['image_url'])) {
+            $mediaUrl = $content['image_url'];
+        }
 
         if ($mediaType === 'image' && $mediaUrl !== '') {
             $localPath = $this->resolveLocalMediaPath($mediaUrl);
             if ($localPath !== null) {
                 return [
-                    $this->graphEndpoint('photos'),
+                    $this->graphEndpoint($this->resolveChannelId($channel), 'photos'),
                     [
                         'caption' => $message,
                         'source' => new CURLFile($localPath, mime_content_type($localPath) ?: 'image/png', basename($localPath)),
-                        'access_token' => facebook_page_access_token(),
+                        'access_token' => $token,
                     ],
                 ];
             }
 
             return [
-                $this->graphEndpoint('photos'),
+                $this->graphEndpoint($this->resolveChannelId($channel), 'photos'),
                 http_build_query([
                     'caption' => $message,
                     'url' => app_absolute_url($mediaUrl),
-                    'access_token' => facebook_page_access_token(),
+                    'access_token' => $token,
                 ]),
             ];
         }
@@ -267,31 +237,31 @@ final class FacebookPagePublisher
             $localPath = $this->resolveLocalMediaPath($mediaUrl);
             if ($localPath !== null) {
                 return [
-                    $this->graphEndpoint('videos'),
+                    $this->graphEndpoint($this->resolveChannelId($channel), 'videos'),
                     [
                         'description' => $message,
                         'source' => new CURLFile($localPath, mime_content_type($localPath) ?: 'video/mp4', basename($localPath)),
-                        'access_token' => facebook_page_access_token(),
+                        'access_token' => $token,
                     ],
                 ];
             }
 
             return [
-                $this->graphEndpoint('videos'),
+                $this->graphEndpoint($this->resolveChannelId($channel), 'videos'),
                 http_build_query([
                     'description' => $message,
                     'file_url' => app_absolute_url($mediaUrl),
-                    'access_token' => facebook_page_access_token(),
+                    'access_token' => $token,
                 ]),
             ];
         }
 
         return [
-            $this->graphEndpoint('feed'),
+            $this->graphEndpoint($this->resolveChannelId($channel), 'feed'),
             http_build_query([
                 'message' => $message,
                 'link' => $this->extractFirstUrl($message),
-                'access_token' => facebook_page_access_token(),
+                'access_token' => $token,
             ]),
         ];
     }
@@ -335,12 +305,12 @@ final class FacebookPagePublisher
         return 'Facebook Graph API trả về lỗi: ' . $message;
     }
 
-    private function graphEndpoint(string $edge): string
+    private function graphEndpoint(string $pageId, string $edge): string
     {
         return sprintf(
             'https://graph.facebook.com/%s/%s/%s',
             FACEBOOK_GRAPH_VERSION,
-            rawurlencode(facebook_page_id()),
+            rawurlencode($pageId),
             $edge
         );
     }

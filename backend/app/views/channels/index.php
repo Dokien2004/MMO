@@ -13,6 +13,7 @@ $typeLabels = [
     'facebook_group' => ['label' => 'Facebook Group', 'icon' => '👥', 'badge' => 'badge-draft'],
     'tiktok'         => ['label' => 'TikTok', 'icon' => '🎵', 'badge' => 'badge-content-ready'],
     'instagram'      => ['label' => 'Instagram', 'icon' => '📸', 'badge' => 'badge-posted'],
+    'threads'        => ['label' => 'Threads', 'icon' => '🧵', 'badge' => 'badge-active'],
 ];
 
 $statusLabels = [
@@ -156,6 +157,8 @@ $statusLabels = [
                     <option value="facebook_page">📘 Facebook Page (API)</option>
                     <option value="facebook_group">👥 Facebook Group (Browser)</option>
                     <option value="tiktok">🎵 TikTok (Browser Upload)</option>
+                    <option value="instagram">📸 Instagram (Browser)</option>
+                    <option value="threads">🧵 Threads (API)</option>
                 </select>
             </div>
             <div class="form-group" style="margin-bottom:12px;">
@@ -168,7 +171,7 @@ $statusLabels = [
             </div>
             <div id="tokenField" class="form-group" style="margin-bottom:12px;">
                 <label class="form-label">Access Token</label>
-                <textarea class="form-control" name="access_token" id="ch_token" rows="2" placeholder="Facebook Page Access Token..."></textarea>
+                <textarea class="form-control" name="access_token" id="ch_token" rows="2" placeholder="Facebook Page / Threads Access Token..."></textarea>
             </div>
             <div id="cookieField" class="form-group" style="margin-bottom:12px;display:none;">
                 <label class="form-label">Cookie Session</label>

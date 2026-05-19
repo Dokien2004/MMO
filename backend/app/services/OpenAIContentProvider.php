@@ -20,17 +20,18 @@ final class OpenAIContentProvider
         return $this->apiKey() !== '' || $this->baseUrl() !== 'https://api.openai.com/v1';
     }
 
-    public function generate(array $product): array
+    public function generate(array $product, string $socialPlatform = ''): array
     {
         if (!$this->isAvailable()) {
             throw new RuntimeException('OPENAI_API_KEY chua duoc cau hinh.');
         }
 
         $promptService = new PromptTemplateService();
-        $systemMsg = $promptService->systemPromptFor('content_text')
+        $systemMsg = $promptService->systemPromptFor('content_text', $socialPlatform)
             ?? 'Ban la copywriter affiliate. Luon tra ve JSON hop le voi cac key: title, body, hashtags, call_to_action.';
-        $userMsg = $promptService->renderForProduct('content_text', $product)
-            ?? $this->buildPrompt($product);
+        $platformArg = $socialPlatform !== '' ? $socialPlatform : null;
+        $userMsg = $promptService->renderForProduct('content_text', $product, [], $platformArg)
+            ?? $this->buildPrompt($product, $socialPlatform);
 
         $payload = [
             'model' => $this->model(),
@@ -180,16 +181,27 @@ final class OpenAIContentProvider
         return null;
     }
 
-    private function buildPrompt(array $product): string
+    private function buildPrompt(array $product, string $socialPlatform = ''): string
     {
         $price = number_format((float)($product['price'] ?? 0), 0, ',', '.');
 
+        $platformTarget = $socialPlatform !== '' ? $socialPlatform : ($product['source_platform'] ?? '');
+        $platformContext = match ($socialPlatform) {
+            'facebook' => 'Viet cho Facebook Fanpage — bai viet ban cam xuc, coi de, khuyen khich chia se.',
+            'tiktok'   => 'Viet cho TikTok — noi dung ngan gon, catchy, phu hop voi xu huong trending, nhac nho di vao link mo ta.',
+            'instagram'=> 'Viet cho Instagram — caption dep, use story telling, hashtag trending, emoji.',
+            'threads'  => 'Viet cho Threads — noi dung chat che, than thiet, quan diem ca nhan, khuyen khich binh luan.',
+            default    => 'Viet noi dung de post Fanpage.',
+        };
+
         return implode("\n", [
-            'Viet noi dung affiliate bang tieng Viet tu nhien, gon, de post Fanpage.',
+            'Ban la copywriter affiliate tieng Viet.',
+            $platformContext,
             'Thong tin san pham:',
             '- Ten: ' . ($product['product_name'] ?? ''),
             '- Gia: ' . $price . ' VND',
-            '- Nen tang: ' . ($product['source_platform'] ?? ''),
+            '- Nen tang ban hang: ' . ($product['source_platform'] ?? ''),
+            '- Mang xa hoi dich: ' . $platformTarget,
             '- Link affiliate: ' . ($product['affiliate_url'] ?? ''),
             '',
             'Yeu cau:',

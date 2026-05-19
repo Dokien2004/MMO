@@ -31,7 +31,7 @@ final class ContentService
         $this->geminiProvider = new GeminiContentProvider();
     }
 
-    public function generateDraftForProduct(int $productId, string $provider = 'template_engine'): array
+    public function generateDraftForProduct(int $productId, string $provider = 'template_engine', string $platform = 'general'): array
     {
         $product = $this->userSelectedProductService->findById($productId);
         if ($product === null) {
@@ -42,16 +42,22 @@ final class ContentService
             throw new InvalidArgumentException('San pham chua co affiliate link.');
         }
 
-        $record = $this->storage->mutate($this->fileName, function (array $contentList) use ($product, $provider, $productId): array {
-            $existing = $this->findByProductIdInRows($contentList, $productId);
-            $record = $this->buildDraftRecord($product, $provider, $existing['id'] ?? $this->nextId($contentList));
-            $contentList = $this->upsertContent($contentList, $record);
+        try {
+            $record = $this->storage->mutate($this->fileName, function (array $contentList) use ($product, $provider, $productId, $platform) {
+                $existing = $this->findByProductIdInRows($contentList, $productId, $platform);
+                $record = $this->buildDraftRecord($product, $provider, $existing['id'] ?? $this->nextId($contentList), $platform);
+                $contentList = $this->upsertContent($contentList, $record);
 
-            return [
-                'rows' => $this->sortContents($contentList),
-                'result' => $record,
-            ];
-        });
+                return [
+                    'rows' => $this->sortContents($contentList),
+                    'result' => $record,
+                ];
+            });
+        } catch (Throwable $outerErr) {
+            error_log(sprintf('[ContentService] mutate threw PID=%d: %s %s:%d',
+                $productId, $outerErr->getMessage(), basename($outerErr->getFile()), $outerErr->getLine()));
+            throw $outerErr;
+        }
 
         $product['status'] = 'content_ready';
         $product['content_status'] = 'draft';
@@ -84,7 +90,7 @@ final class ContentService
         return $this->changeStatus($contentId, 'used');
     }
 
-    public function generateForEligibleProducts(int $limit = 10, string $provider = 'template_engine'): array
+    public function generateForEligibleProducts(int $limit = 10, string $provider = 'template_engine', string $platform = 'general'): array
     {
         $products = $this->userSelectedProductService->all();
         $generated = [];
@@ -95,10 +101,18 @@ final class ContentService
                 continue;
             }
 
+            $productName = mb_substr($product['product_name'] ?? '?', 0, 30);
             try {
-                $this->generateDraftForProduct((int)$product['id'], $provider);
+                $this->generateDraftForProduct((int)$product['id'], $provider, $platform);
             } catch (Throwable $e) {
-                // Skip failed products, continue to next
+                error_log(sprintf(
+                    '[ContentService] generateDraftForProduct PID=%d (%s) FAILED: %s %s:%d',
+                    $product['id'],
+                    $productName,
+                    $e->getMessage(),
+                    basename($e->getFile()),
+                    $e->getLine()
+                ));
                 continue;
             }
             $generated[] = $product['id'];
@@ -174,9 +188,9 @@ final class ContentService
         ];
     }
 
-    private function buildDraftRecord(array $product, string $provider, int $contentId): array
+    private function buildDraftRecord(array $product, string $provider, int $contentId, string $platform = 'general'): array
     {
-        $providerPayload = $this->resolveProviderPayload($product, $provider);
+        $providerPayload = $this->resolveProviderPayload($product, $provider, $platform);
         $affiliateLink = $this->affiliateLinkService->findLinkByProductId((int)$product['id']);
 
         return [
@@ -191,22 +205,24 @@ final class ContentService
             'ai_provider' => $providerPayload['provider_used'],
             'media_type' => 'none',
             'media_url' => '',
-            'media_prompt' => $this->buildMediaPrompt($product, $providerPayload),
+            'media_prompt' => $this->buildMediaPrompt($product, $providerPayload, $platform),
             'media_status' => 'pending',
             'status' => 'draft',
             'notes' => $providerPayload['notes'],
+            'platform' => $platform,
+            'channel_type' => $platform,
             'created_at' => date('c'),
             'updated_at' => date('c'),
         ];
     }
 
-    private function resolveProviderPayload(array $product, string $provider): array
+    private function resolveProviderPayload(array $product, string $provider, string $platform): array
     {
         $normalized = strtolower(trim($provider));
 
         // gemini → GeminiContentProvider → 9router
         if ($normalized === 'gemini') {
-            $payload = $this->tryAiProvider($product, 'gemini');
+            $payload = $this->tryAiProvider($product, 'gemini', $platform);
             if ($payload !== null) {
                 return $payload;
             }
@@ -215,7 +231,7 @@ final class ContentService
 
         // openai/minimax → OpenAIContentProvider fallback chain → 9router
         if ($normalized === 'openai' || $normalized === 'minimax') {
-            $payload = $this->tryAiProvider($product, 'openai');
+            $payload = $this->tryAiProvider($product, 'openai', $platform);
             if ($payload !== null) {
                 return $payload;
             }
@@ -226,12 +242,12 @@ final class ContentService
         return $this->templatePayload($product, 'Sinh boi template noi bo. Co the thay bang API AI that sau.');
     }
 
-    private function tryAiProvider(array $product, string $provider): ?array
+    private function tryAiProvider(array $product, string $provider, string $platform): ?array
     {
         try {
             $result = $provider === 'gemini'
-                ? $this->geminiProvider->generate($product)
-                : $this->generateWithOpenAiFallback($product);
+                ? $this->geminiProvider->generate($product, $platform)
+                : $this->generateWithOpenAiFallback($product, $platform);
 
             return [
                 'title' => $result['title'] !== '' ? $result['title'] : ('Review nhanh: ' . $product['product_name']),
@@ -250,7 +266,7 @@ final class ContentService
         }
     }
 
-    private function generateWithOpenAiFallback(array $product): array
+    private function generateWithOpenAiFallback(array $product, string $platform = 'general'): array
     {
         $models = array_values(array_unique(array_filter([
             openai_model(),
@@ -261,7 +277,7 @@ final class ContentService
         foreach ($models as $index => $model) {
             try {
                 $provider = new OpenAIContentProvider($model, openai_base_url(), openai_api_key());
-                $result = $provider->generate($product);
+                $result = $provider->generate($product, $platform);
                 $result['provider_used'] = 'openai:' . $model;
 
                 if ($index > 0) {
@@ -322,10 +338,11 @@ final class ContentService
         return '#affiliate #mvp #reviewnhanh #' . preg_replace('/[^a-z0-9]+/i', '', strtolower((string)$product['source_platform']));
     }
 
-    private function buildMediaPrompt(array $product, array $providerPayload): string
+    private function buildMediaPrompt(array $product, array $providerPayload, string $platform = 'general'): string
     {
         $promptService = new PromptTemplateService();
-        $rendered = $promptService->renderForProduct('image', $product, $providerPayload);
+        $platformArg = $platform !== 'general' ? $platform : null;
+        $rendered = $promptService->renderForProduct('image', $product, $providerPayload, $platformArg);
         if ($rendered !== null) {
             return $rendered;
         }
@@ -342,19 +359,19 @@ final class ContentService
         ]);
     }
 
-    public function attachMedia(int $contentId, string $mediaType, string $mediaUrl, string $mediaPrompt = '', string $mediaStatus = 'ready'): array
+    public function attachImage(int $contentId, string $mediaUrl, string $mediaPrompt = '', string $mediaStatus = 'ready'): array
     {
-        return $this->storage->mutate($this->fileName, function (array $contents) use ($contentId, $mediaType, $mediaUrl, $mediaPrompt, $mediaStatus): array {
+        return $this->storage->mutate($this->fileName, function (array $contents) use ($contentId, $mediaUrl, $mediaPrompt, $mediaStatus): array {
             foreach ($contents as &$content) {
                 if ((int)($content['id'] ?? 0) !== $contentId) {
                     continue;
                 }
-                $content['media_type'] = $mediaType;
-                $content['media_url'] = $mediaUrl;
+                $content['image_url'] = $mediaUrl;
+                $content['image_type'] = 'image';
                 if ($mediaPrompt !== '') {
-                    $content['media_prompt'] = $mediaPrompt;
+                    $content['image_prompt'] = $mediaPrompt;
                 }
-                $content['media_status'] = $mediaStatus;
+                $content['image_status'] = $mediaStatus;
                 $content['updated_at'] = date('c');
 
                 return [
@@ -364,7 +381,33 @@ final class ContentService
             }
             unset($content);
 
-            throw new InvalidArgumentException('Khong tim thay content can gan media.');
+            throw new InvalidArgumentException('Khong tim thay content can gan image.');
+        });
+    }
+
+    public function attachVideo(int $contentId, string $mediaUrl, string $mediaPrompt = '', string $mediaStatus = 'ready'): array
+    {
+        return $this->storage->mutate($this->fileName, function (array $contents) use ($contentId, $mediaUrl, $mediaPrompt, $mediaStatus): array {
+            foreach ($contents as &$content) {
+                if ((int)($content['id'] ?? 0) !== $contentId) {
+                    continue;
+                }
+                $content['video_url'] = $mediaUrl;
+                $content['video_type'] = 'video';
+                if ($mediaPrompt !== '') {
+                    $content['video_prompt'] = $mediaPrompt;
+                }
+                $content['video_status'] = $mediaStatus;
+                $content['updated_at'] = date('c');
+
+                return [
+                    'rows' => $this->sortContents($contents),
+                    'result' => $content,
+                ];
+            }
+            unset($content);
+
+            throw new InvalidArgumentException('Khong tim thay content can gan video.');
         });
     }
 
@@ -419,22 +462,67 @@ final class ContentService
 
     private function findByProductId(int $productId): ?array
     {
-        return $this->findByProductIdInRows($this->allContents(), $productId);
+        return $this->findByProductIdInRows($this->allContents(), $productId, 'general');
     }
 
     private function upsertContent(array $contents, array $record): array
     {
+        $updated = false;
         foreach ($contents as $index => $content) {
-            if ((int)($content['product_id'] ?? 0) === (int)$record['product_id']) {
-                $record['id'] = (int)$content['id'];
-                $record['created_at'] = (string)$content['created_at'];
+            if ((int)($content['product_id'] ?? 0) === (int)$record['product_id']
+                && ($content['platform'] ?? 'general') === ($record['platform'] ?? 'general')) {
+                $record['id'] = (int)($content['id'] ?? $record['id']);
+                $record['created_at'] = (string)($content['created_at'] ?? $record['created_at']);
                 $contents[$index] = $record;
-                return $contents;
+                $updated = true;
+                break;
             }
         }
-
-        array_unshift($contents, $record);
+        if (!$updated) {
+            array_unshift($contents, $record);
+        }
         return $contents;
+    }
+
+    public function regenerateText(int $contentId, string $provider = 'gemini', string $platform = 'general'): array
+    {
+        $content = $this->findById($contentId);
+        if ($content === null) {
+            throw new InvalidArgumentException('Khong tim thay content de tao lai.');
+        }
+
+        $product = $this->userSelectedProductService->findById((int)$content['product_id']);
+        if ($product === null) {
+            throw new InvalidArgumentException('Khong tim thay san pham tu content nay.');
+        }
+
+        $providerPayload = $this->resolveProviderPayload($product, $provider, $platform);
+
+        return $this->storage->mutate($this->fileName, function (array $contents) use ($contentId, $product, $provider, $platform, $providerPayload) {
+            foreach ($contents as &$item) {
+                if ((int)($item['id'] ?? 0) !== $contentId) {
+                    continue;
+                }
+                // Keep existing media (image_url, video_url, image_status, video_status)
+                // Only regenerate text fields
+                $item['title'] = $providerPayload['title'];
+                $item['body'] = $providerPayload['body'];
+                $item['hashtags'] = $providerPayload['hashtags'];
+                $item['call_to_action'] = $providerPayload['call_to_action'];
+                $item['ai_provider'] = $providerPayload['provider_used'];
+                $item['media_prompt'] = $this->buildMediaPrompt($product, $providerPayload, $platform);
+                $item['notes'] = $providerPayload['notes'];
+                $item['updated_at'] = date('c');
+
+                return [
+                    'rows' => $this->sortContents($contents),
+                    'result' => $item,
+                ];
+            }
+            unset($item);
+
+            throw new InvalidArgumentException('Khong tim thay content trong danh sach.');
+        });
     }
 
     private function saveContents(array $contents): void
@@ -447,10 +535,10 @@ final class ContentService
         return $this->storage->nextIdForRows($contents);
     }
 
-    private function findByProductIdInRows(array $contents, int $productId): ?array
+    private function findByProductIdInRows(array $contents, int $productId, string $platform = 'general'): ?array
     {
         foreach ($contents as $content) {
-            if ((int)($content['product_id'] ?? 0) === $productId) {
+            if ((int)($content['product_id'] ?? 0) === $productId && ($content['platform'] ?? 'general') === $platform) {
                 return $content;
             }
         }

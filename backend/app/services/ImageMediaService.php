@@ -26,9 +26,9 @@ final class ImageMediaService
             $prompt = $this->fallbackPrompt($content);
         }
 
-        $imageBinary = $this->requestImage($prompt);
+        $imageBinary = $this->requestImage($prompt, $content);
         $relativeUrl = $this->saveImage($contentId, $imageBinary);
-        $updated = $this->contentService->attachMedia($contentId, 'image', $relativeUrl, $prompt, 'ready');
+        $updated = $this->contentService->attachImage($contentId, $relativeUrl, $prompt, 'ready');
 
         $this->taskLogService->create('generate_content_image', 'success', [
             'content_id' => $contentId,
@@ -40,7 +40,7 @@ final class ImageMediaService
         return $updated;
     }
 
-    public function generateForPendingContents(int $limit = 5): array
+    public function generateForPendingContents(int $limit = 5, string $platform = 'general'): array
     {
         $limit = max(1, min(20, $limit));
         $contents = $this->contentService->allContents();
@@ -51,7 +51,10 @@ final class ImageMediaService
             if (count($generated) >= $limit) {
                 break;
             }
-            if (!empty($content['media_url'] ?? '') && ($content['media_type'] ?? 'none') !== 'none') {
+            if (!empty($content['image_url'] ?? '') && !empty($content['image_status'] ?? '') && $content['image_status'] !== 'failed') {
+                continue;
+            }
+            if ($platform !== 'general' && ($content['platform'] ?? 'general') !== $platform) {
                 continue;
             }
 
@@ -77,12 +80,14 @@ final class ImageMediaService
         ];
     }
 
-    private function requestImage(string $prompt): string
+    private function requestImage(string $prompt, array $content = []): string
     {
         if (image_provider() === 'meigen') {
+            // Try to get a better Meigen prompt from gallery
+            $enriched = $this->enrichPromptWithMeigen($prompt, $content);
             try {
                 $this->lastModelUsed = 'meigen:' . meigen_model();
-                return $this->requestMeiGenImage($prompt);
+                return $this->requestMeiGenImage($enriched);
             } catch (RuntimeException $exception) {
                 $this->taskLogService->create('generate_content_image_fallback', 'warning', [
                     'from_model' => 'meigen:' . meigen_model(),
@@ -92,6 +97,79 @@ final class ImageMediaService
         }
 
         return $this->requestDirectImage($prompt);
+    }
+
+    /**
+     * Enrich image prompt using Meigen gallery prompts.
+     * Uses platform and product info from content to find the best Meigen prompt.
+     */
+    private function enrichPromptWithMeigen(string $basePrompt, array $content): string
+    {
+        try {
+            $meigenSvc = new MeigenPromptService();
+
+            $platform = $content['platform'] ?? $content['channel_type'] ?? 'facebook';
+            $productId = (int)($content['product_id'] ?? 0);
+
+            // Get product info for better prompt matching
+            $productName = '';
+            if ($productId > 0) {
+                $productService = new ProductSyncService();
+                $product = $productService->findProductById($productId);
+                if ($product !== null) {
+                    $productName = $product['name'] ?? $product['product_name'] ?? '';
+                }
+            }
+
+            if ($productName === '') {
+                $productName = $this->extractProductFromPrompt($basePrompt);
+            }
+
+            $productData = [
+                'product_name' => $productName,
+                'price' => $content['price'] ?? '',
+            ];
+
+            $meigenPrompt = $meigenSvc->bestPromptFor($platform, $productData);
+
+            if ($meigenPrompt !== null && mb_strlen($meigenPrompt) > 30) {
+                $this->taskLogService->create('meigen_prompt_enriched', 'info', [
+                    'content_id' => $content['id'] ?? 0,
+                    'platform' => $platform,
+                    'product' => $productName,
+                    'original_len' => mb_strlen($basePrompt),
+                    'enriched_len' => mb_strlen($meigenPrompt),
+                ]);
+                return $meigenPrompt;
+            }
+        } catch (Throwable $e) {
+            // Silently fall back to original prompt
+        }
+
+        return $basePrompt;
+    }
+
+    private function detectPlatform(string $prompt): string
+    {
+        $lower = mb_strtolower($prompt);
+        if (strpos($lower, 'facebook') !== false) return 'facebook';
+        if (strpos($lower, 'tiktok') !== false) return 'tiktok';
+        if (strpos($lower, 'instagram') !== false) return 'instagram';
+        if (strpos($lower, 'threads') !== false) return 'threads';
+        return 'facebook';
+    }
+
+    private function extractProductFromPrompt(string $prompt): string
+    {
+        // Try to extract product name from common patterns
+        if (preg_match('/(?:sản phẩm|product)[:\s]+([^\n,\.]+)/ui', $prompt, $m)) {
+            return trim($m[1]);
+        }
+        if (preg_match('/(?:ten|name)[:\s]+([^\n,\.]+)/ui', $prompt, $m)) {
+            return trim($m[1]);
+        }
+        // Return original if can't extract
+        return mb_substr($prompt, 0, 50);
     }
 
     private function requestDirectImage(string $prompt): string

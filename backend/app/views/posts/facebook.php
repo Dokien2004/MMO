@@ -74,51 +74,153 @@ $defaultInterval = (int)($automationSettings['publish_interval_minutes'] ?? 15);
             <label class="form-label">Giờ bắt đầu</label>
             <input class="form-control" type="datetime-local" name="scheduled_at" value="<?= e($defaultStartLocal) ?>">
         </div>
+        <div class="form-group">
+            <label class="form-label">Đăng kèm</label>
+            <div style="display:flex;gap:12px;margin-top:6px">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input type="radio" name="media_type" value="auto" checked> <span>Tự động</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input type="radio" name="media_type" value="image"> <span>Chỉ ảnh</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input type="radio" name="media_type" value="video"> <span>Chỉ video</span>
+                </label>
+            </div>
+        </div>
         <button type="submit" class="btn btn-purple mt-8">Lên lịch cho Fanpage</button>
     </form>
 </div>
 
 <div class="card mt-16">
     <h3 class="card-title mb-16">📋 Danh sách bài đăng Facebook</h3>
-    <?php if (empty($facebookPosts)): ?>
-        <div class="empty-state"><p>Chưa có bài đăng nào trên Facebook.</p></div>
+    <?php
+    // Build a unified list: scheduled posts + approved content not yet scheduled
+    $allItems = [];
+
+    // Add scheduled posts (from $facebookPosts)
+    foreach ($facebookPosts as $post) {
+        $content = $postContents[(int)($post['content_id'] ?? 0)] ?? null;
+        $allItems[] = [
+            'type' => 'post',
+            'post' => $post,
+            'content' => $content,
+            'is_scheduled' => ($post['status'] ?? '') === 'scheduled',
+        ];
+    }
+
+    // Add approved content not yet scheduled
+    foreach ($approvedUnscheduled as $content) {
+        $allItems[] = [
+            'type' => 'unscheduled',
+            'post' => null,
+            'content' => $content,
+            'is_scheduled' => false,
+        ];
+    }
+
+    // Sort: scheduled first, then by scheduled_at
+    usort($allItems, function ($a, $b) {
+        if ($a['is_scheduled'] !== $b['is_scheduled']) return $a['is_scheduled'] ? -1 : 1;
+        return strcmp((string)($b['post']['scheduled_at'] ?? ''), (string)($a['post']['scheduled_at'] ?? ''));
+    });
+    ?>
+    <?php if (empty($allItems)): ?>
+        <div class="empty-state"><p>Chưa có bài đăng nào. Hãy duyệt content trong mục Contents trước.</p></div>
     <?php else: ?>
         <table class="data-table">
             <thead><tr>
                 <th>Nội dung</th>
-                <th>Kênh</th>
+                <th>Media Preview</th>
+                <th>Media</th>
                 <th>Lịch / Kết quả</th>
                 <th>Trạng thái</th>
                 <th>Thao tác</th>
             </tr></thead>
             <tbody>
-            <?php foreach ($facebookPosts as $post): ?>
+            <?php foreach ($allItems as $item): ?>
                 <?php
-                $content = $postContents[(int)($post['content_id'] ?? 0)] ?? null;
-                $isApi = ($post['channel'] ?? '') === 'fanpage_api';
-                $isScheduled = ($post['status'] ?? '') === 'scheduled';
+                $post = $item['post'] ?? null;
+                $content = $item['content'];
+                $isPost = $item['type'] === 'post';
+                $isScheduled = $item['is_scheduled'];
+                $isApi = $post && ($post['channel'] ?? '') === 'fanpage_api';
+                $hasImage = $content && !empty($content['image_url']);
+                $hasVideo = $content && !empty($content['video_url']);
+                $postMediaType = $post['media_type'] ?? 'auto';
                 ?>
                 <tr>
                     <td data-label="Nội dung">
-                        <strong><?= $content ? e((string)$content['title']) : ('Content #' . (int)$post['content_id']) ?></strong>
-                        <div class="sub">Post #<?= (int)$post['id'] ?></div>
-                        <?php if ($content): ?>
-                            <div class="post-preview-text"><?= e(mb_substr((string)($content['body'] ?? ''), 0, 120)) ?></div>
+                        <?php if ($isPost && $post): ?>
+                            <strong><?= $content ? e((string)$content['title']) : ('Content #' . (int)$post['content_id']) ?></strong>
+                            <div class="sub">Post #<?= (int)$post['id'] ?></div>
+                        <?php else: ?>
+                            <strong><?= e((string)$content['title']) ?></strong>
+                            <div class="sub">Content #<?= (int)$content['id'] ?></div>
+                        <?php endif; ?>
+                        <?php if ($content && !empty($content['body'])): ?>
+                            <div class="post-preview-text"><?= e(mb_substr((string)($content['body'] ?? ''), 0, 100)) ?>…</div>
                         <?php endif; ?>
                     </td>
-                    <td data-label="Kênh">
-                        <span class="badge <?= $isApi ? 'badge-success' : 'badge-pending' ?>"><?= e((string)$post['channel']) ?></span>
+                    <td data-label="Media Preview">
+                        <div class="media-gallery" style="gap:4px">
+                            <?php if ($hasImage): ?>
+                                <img class="media-thumb clickable-media" src="<?= e((string)$content['image_url']) ?>" alt="" data-type="image" data-url="<?= e((string)$content['image_url']) ?>" style="height:40px;width:40px;object-fit:cover;border-radius:4px;border:1px solid var(--border)">
+                            <?php endif; ?>
+                            <?php if ($hasVideo): ?>
+                                <video class="media-thumb clickable-media" src="<?= e((string)$content['video_url']) ?>" data-type="video" data-url="<?= e((string)$content['video_url']) ?>" style="height:40px;width:40px;object-fit:cover;border-radius:4px;border:1px solid var(--accent)" muted></video>
+                            <?php endif; ?>
+                            <?php if (!$hasImage && !$hasVideo): ?>
+                                <span class="text-muted" style="font-size:11px">— chưa tạo</span>
+                            <?php endif; ?>
+                        </div>
+                    </td>
+                    <td data-label="Media">
+                        <?php if ($isScheduled && $isPost && $post): ?>
+                            <form data-ajax method="POST" action="<?= url('/posts/update-media-type') ?>" style="display:flex;flex-direction:column;gap:4px">
+                                <input type="hidden" name="post_id" value="<?= (int)$post['id'] ?>">
+                                <select name="media_type" style="padding:3px 6px;border-radius:4px;font-size:11px" onchange="this.form.submit()">
+                                    <option value="auto" <?= $postMediaType === 'auto' ? 'selected' : '' ?>>Tự động</option>
+                                    <option value="image" <?= $postMediaType === 'image' ? 'selected' : '' ?> <?= !$hasImage ? 'disabled' : '' ?>>Ảnh <?= !$hasImage ? '(❌)' : '' ?></option>
+                                    <option value="video" <?= $postMediaType === 'video' ? 'selected' : '' ?> <?= !$hasVideo ? 'disabled' : '' ?>>Video <?= !$hasVideo ? '(❌)' : '' ?></option>
+                                </select>
+                            </form>
+                        <?php elseif (!$isScheduled): ?>
+                            <form data-ajax method="POST" action="<?= url('/posts/schedule') ?>" style="display:flex;flex-direction:column;gap:4px">
+                                <select name="media_type" style="padding:3px 6px;border-radius:4px;font-size:11px">
+                                    <option value="auto" <?= !$hasVideo ? 'selected' : '' ?>>Tự động</option>
+                                    <option value="image" <?= $hasVideo && $hasImage ? '' : '' ?> <?= !$hasImage ? 'disabled' : '' ?>>Ảnh <?= !$hasImage ? '(❌)' : '' ?></option>
+                                    <option value="video" <?= $hasVideo ? 'selected' : '' ?> <?= !$hasVideo ? 'disabled' : '' ?>>Video <?= !$hasVideo ? '(❌)' : '' ?></option>
+                                </select>
+                                <input type="hidden" name="content_id" value="<?= (int)$content['id'] ?>">
+                                <input type="hidden" name="channel" value="fanpage_api">
+                                <input type="hidden" name="scheduled_at" value="<?= e($defaultStartLocal) ?>">
+                                <button type="submit" class="btn btn-sm btn-purple">📅 Lên lịch</button>
+                            </form>
+                        <?php else: ?>
+                            <span class="badge"><?= $postMediaType === 'auto' ? 'Auto' : ucfirst($postMediaType) ?></span>
+                        <?php endif; ?>
                     </td>
                     <td data-label="Lịch / kết quả">
-                        <div class="text-sm"><span class="text-muted">Lên lịch:</span> <?= e((string)$post['scheduled_at']) ?></div>
-                        <?php if (!empty($post['posted_at'])): ?>
-                            <div class="text-sm"><span class="text-muted">Đã đăng:</span> <?= e((string)$post['posted_at']) ?></div>
-                        <?php endif; ?>
-                        <?php if (!empty($post['result_note'])): ?>
-                            <div class="sub mt-4"><?= e((string)$post['result_note']) ?></div>
+                        <?php if ($isPost && $post): ?>
+                            <div class="text-sm"><span class="text-muted">Lên lịch:</span> <?= e((string)($post['scheduled_at'] ?? '—')) ?></div>
+                            <?php if (!empty($post['posted_at'])): ?>
+                                <div class="text-sm"><span class="text-muted">Đã đăng:</span> <?= e((string)$post['posted_at']) ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($post['result_note'])): ?>
+                                <div class="sub mt-4"><?= e((string)$post['result_note']) ?></div>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <span class="sub">— chưa lên lịch</span>
                         <?php endif; ?>
                     </td>
-                    <td data-label="Trạng thái"><?= status_badge((string)$post['status']) ?></td>
+                    <td data-label="Trạng thái">
+                        <?php if ($isPost && $post): ?>
+                            <?= status_badge((string)$post['status']) ?>
+                        <?php else: ?>
+                            <span class="badge badge-pending">Chờ lên lịch</span>
+                        <?php endif; ?>
+                    </td>
                     <td data-label="Thao tác">
                         <?php if ($isScheduled && $isApi): ?>
                             <form data-ajax method="POST" action="<?= url('/posts/publish') ?>" class="inline">
@@ -126,7 +228,7 @@ $defaultInterval = (int)($automationSettings['publish_interval_minutes'] ?? 15);
                                 <button type="submit" class="btn btn-success btn-sm">Đăng ngay</button>
                             </form>
                         <?php endif; ?>
-                        <?php if (($post['status'] ?? '') === 'scheduled'): ?>
+                        <?php if ($isScheduled && ($post['status'] ?? '') === 'scheduled'): ?>
                             <form data-ajax method="POST" action="<?= url('/posts/mark-success') ?>" class="inline">
                                 <input type="hidden" name="post_id" value="<?= (int)$post['id'] ?>">
                                 <button type="submit" class="btn btn-accent btn-sm">Đã đăng</button>

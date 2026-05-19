@@ -1,47 +1,134 @@
 <?php
-$keyLabels = [
-    'content_text'   => ['🖊️ Bài viết', 'Prompt gửi LLM để sinh tiêu đề + body + hashtag + CTA'],
-    'image'          => ['🖼️ Ảnh AI', 'Prompt chính khi có đủ thông tin sản phẩm'],
-    'image_fallback' => ['🖼️ Ảnh dự phòng', 'Prompt khi thiếu thông tin sản phẩm'],
-    'video'          => ['🎬 Video AI', 'Prompt cho Kling / MeiGen / FFmpeg'],
+$platforms = [
+    'facebook'  => ['icon' => '📘', 'label' => 'Facebook'],
+    'tiktok'    => ['icon' => '🎵', 'label' => 'TikTok'],
+    'instagram' => ['icon' => '📷', 'label' => 'Instagram'],
+    'threads'   => ['icon' => '💬', 'label' => 'Threads'],
+    'general'   => ['icon' => '🌐', 'label' => 'Chung (Fallback)'],
 ];
-$templatesByKey = [];
+
+$typeLabels = [
+    'content' => ['icon' => '📝', 'label' => 'Content', 'desc' => 'Sinh bài viết text'],
+    'image'   => ['icon' => '🖼️', 'label' => 'Image', 'desc' => 'Tạo ảnh AI'],
+    'video'   => ['icon' => '🎬', 'label' => 'Video', 'desc' => 'Tạo video slideshow'],
+];
+
+// Group templates
+$byPlatform = [];
 foreach ($templates as $t) {
-    $templatesByKey[$t['template_key']][] = $t;
+    $p = $t['platform'] ?? 'general';
+    $key = $t['template_key'] ?? '';
+    // Determine type
+    if (strpos($key, 'content_text') === 0) $type = 'content';
+    elseif (strpos($key, 'image') === 0) $type = 'image';
+    elseif (strpos($key, 'video') === 0) $type = 'video';
+    else continue;
+    
+    if (!isset($byPlatform[$p])) $byPlatform[$p] = [];
+    if (!isset($byPlatform[$p][$type])) $byPlatform[$p][$type] = null;
+    $byPlatform[$p][$type] = $t;
 }
 ?>
+
+<style>
+.prompts-tabs{display:flex;gap:4px;margin-bottom:20px;flex-wrap:wrap}
+.prompts-tab{padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:var(--bg-hover);color:var(--text-muted);transition:all .2s}
+.prompts-tab:hover{background:var(--border)}
+.prompts-tab.active{background:var(--accent);color:#fff}
+.platform-section{display:none}
+.platform-section.active{display:block}
+.platform-section h2{font-size:16px;margin:0 0 16px;color:var(--text)}
+.type-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;margin-bottom:16px}
+.type-card{border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--bg-card)}
+.type-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.type-card h3{margin:0;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+.type-card h3 .sub{font-size:12px;font-weight:400;color:var(--text-muted)}
+.prompt-field{margin-bottom:12px}
+.prompt-field label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.prompt-field textarea{width:100%;border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px;line-height:1.5;background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;resize:vertical;box-sizing:border-box;min-height:80px}
+.prompt-field textarea:focus{outline:none;border-color:var(--accent)}
+.btn-save{background:var(--success);color:#fff;border:none;padding:8px 20px;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px}
+.btn-save:hover{opacity:.9}
+.saved-msg{font-size:12px;color:var(--success);margin-top:6px;display:none}
+.badge-active{background:var(--success);color:#fff;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}
+.badge-muted{background:var(--bg-hover);color:var(--text-muted);padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}
+</style>
 
 <div class="page-header">
     <div>
         <div class="page-kicker">Prompt Engineering</div>
         <h2>Prompt Templates</h2>
-        <p>Quản lý kịch bản AI. Thay đổi cách viết bài, thiết kế ảnh, dựng video — không cần sửa code.</p>
-    </div>
-    <div class="btn-group">
-        <a class="btn btn-outline" href="<?= url('/settings') ?>">⚙️ Settings</a>
-        <button class="btn btn-accent" onclick="openCreateModal()">+ Tạo template mới</button>
+        <p>Sửa prompt cho từng mạng xã hội: content, ảnh, video.</p>
     </div>
 </div>
 
-<div class="action-strip">
-    <div>
-        <strong><?= count($templates) ?> templates</strong>
-        <div class="sub">
-            <?php foreach ($templateKeys as $key => $desc): ?>
-                <?php $active = array_filter($templatesByKey[$key] ?? [], fn($t) => !empty($t['is_active'])); ?>
-                <?= $keyLabels[$key][0] ?? $key ?>: <?= count($active) ? '✅' : '⚠️' ?>
+<!-- Tabs -->
+<div class="prompts-tabs">
+    <?php foreach ($platforms as $key => $info): ?>
+        <button class="prompts-tab <?= $key === 'facebook' ? 'active' : '' ?>" 
+                data-platform="<?= e($key) ?>"
+                onclick="switchTab('<?= e($key) ?>')">
+            <?= $info['icon'] ?> <?= $info['label'] ?>
+        </button>
+    <?php endforeach; ?>
+</div>
+
+<!-- Sections -->
+<?php foreach ($platforms as $pkey => $pinfo): ?>
+    <div class="platform-section <?= $pkey === 'facebook' ? 'active' : '' ?>" id="section-<?= e($pkey) ?>">
+        <h2><?= $pinfo['icon'] ?> <?= $pinfo['label'] ?></h2>
+        
+        <div class="type-grid">
+            <?php foreach ($typeLabels as $tkey => $tinfo): ?>
+                <?php $tpl = $byPlatform[$pkey][$tkey] ?? null; ?>
+                <div class="type-card">
+                    <div class="type-card-header">
+                        <h3><?= $tinfo['icon'] ?> <?= $tinfo['label'] ?> <span class="sub">— <?= $tinfo['desc'] ?></span></h3>
+                        <?php if ($tpl): ?>
+                            <span class="badge-active">✓ Active</span>
+                        <?php else: ?>
+                            <span class="badge-muted">Fallback</span>
+                        <?php endif; ?>
+                    </div>
+
+                    <?php if ($tpl): ?>
+                        <form data-ajax method="POST" action="<?= url('/prompts/save') ?>" 
+                              onsubmit="savePrompt(this, '<?= e($pkey) ?>_<?= e($tkey) ?>'); return false;">
+                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                            <input type="hidden" name="id" value="<?= (int)$tpl['id'] ?>">
+                            <input type="hidden" name="template_key" value="<?= e($tpl['template_key']) ?>">
+                            <input type="hidden" name="platform" value="<?= e($pkey) ?>">
+                            <input type="hidden" name="template_name" value="<?= e($tpl['template_name']) ?>">
+                            <input type="hidden" name="is_active" value="1">
+                            <input type="hidden" name="sort_order" value="10">
+
+                            <div class="prompt-field">
+                                <label>System Prompt</label>
+                                <textarea name="system_prompt" rows="4"><?= e($tpl['system_prompt'] ?? '') ?></textarea>
+                            </div>
+
+                            <div class="prompt-field">
+                                <label>User Prompt</label>
+                                <textarea name="user_prompt" rows="4"><?= e($tpl['user_prompt'] ?? '') ?></textarea>
+                            </div>
+
+                            <button type="submit" class="btn-save">💾 Lưu</button>
+                            <span class="saved-msg" id="saved-<?= e($pkey) ?>_<?= e($tkey) ?>">✓ Đã lưu</span>
+                            <span class="sub" style="margin-left:12px;font-size:11px">#<?= (int)$tpl['id'] ?></span>
+                        </form>
+                    <?php else: ?>
+                        <p class="sub" style="font-size:12px">Đang dùng prompt chung (general). Hệ thống sẽ tự fallback.</p>
+                    <?php endif; ?>
+                </div>
             <?php endforeach; ?>
         </div>
     </div>
-    <div class="btn-group">
-        <a class="btn btn-outline" href="<?= url('/contents') ?>">Content</a>
-    </div>
-</div>
+<?php endforeach; ?>
 
 <!-- Placeholder reference -->
-<div class="card mb-16" id="placeholderRef">
+<div class="card mb-16" style="margin-top:8px">
     <div class="card-title" style="cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-        📋 Biến khả dụng <span class="sub">(bấm để mở/đóng)</span>
+        📋 Biến khả dụng trong prompt <span class="sub">(bấm để mở/đóng)</span>
     </div>
     <div style="display:none">
         <div class="table-wrap">
@@ -57,234 +144,46 @@ foreach ($templates as $t) {
                 </tbody>
             </table>
         </div>
-        <div class="hint-box mt-8">
-            Khi sinh content/ảnh/video, hệ thống sẽ tự thay <code>{{product_name}}</code> thành tên sản phẩm thật, <code>{{price}}</code> thành giá đã format, v.v.
+        <div class="hint-box">
+            Khi sinh content/ảnh/video, hệ thống tự thay <code>{{product_name}}</code> bằng tên sản phẩm, <code>{{price}}</code> bằng giá format, v.v.
         </div>
     </div>
 </div>
 
-<!-- Template cards by key -->
-<?php foreach ($templateKeys as $key => $desc): ?>
-    <div class="card mb-16">
-        <div class="card-title"><?= $keyLabels[$key][0] ?? $key ?> — <?= e($desc) ?></div>
-        <div class="sub mb-8"><?= e($keyLabels[$key][1] ?? '') ?></div>
-
-        <?php if (empty($templatesByKey[$key])): ?>
-            <div class="empty-state">
-                <p>Chưa có template nào cho loại này. Hệ thống sẽ dùng prompt mặc định hardcode.</p>
-                <button class="btn btn-accent" onclick="openCreateModal('<?= e($key) ?>')">+ Tạo template</button>
-            </div>
-        <?php else: ?>
-            <?php foreach ($templatesByKey[$key] as $t): ?>
-                <div class="prompt-card <?= !empty($t['is_active']) ? 'prompt-active' : 'prompt-inactive' ?>" id="tmpl-<?= (int)$t['id'] ?>">
-                    <div class="prompt-card-header">
-                        <div>
-                            <strong><?= e($t['template_name']) ?></strong>
-                            <?php if (!empty($t['is_active'])): ?>
-                                <span class="badge badge-success">Đang dùng</span>
-                            <?php else: ?>
-                                <span class="badge badge-muted">Tắt</span>
-                            <?php endif; ?>
-                            <span class="sub">#<?= (int)$t['id'] ?> · Cập nhật <?= e($t['updated_at']) ?></span>
-                        </div>
-                        <div class="btn-group">
-                            <?php if (empty($t['is_active'])): ?>
-                                <button class="btn btn-success btn-sm" onclick="activateTemplate(<?= (int)$t['id'] ?>)">✅ Kích hoạt</button>
-                            <?php endif; ?>
-                            <button class="btn btn-outline btn-sm" onclick="editTemplate(<?= (int)$t['id'] ?>)">✏️ Sửa</button>
-                            <button class="btn btn-outline btn-sm" onclick="previewTemplate(<?= (int)$t['id'] ?>)">👁️ Preview</button>
-                            <button class="btn btn-outline btn-sm" onclick="deleteTemplate(<?= (int)$t['id'] ?>, '<?= e(addslashes($t['template_name'])) ?>')">🗑️</button>
-                        </div>
-                    </div>
-                    <?php if (trim($t['system_prompt'] ?? '') !== ''): ?>
-                        <div class="prompt-section">
-                            <div class="prompt-label">System Prompt:</div>
-                            <pre class="prompt-pre"><?= e($t['system_prompt']) ?></pre>
-                        </div>
-                    <?php endif; ?>
-                    <div class="prompt-section">
-                        <div class="prompt-label">User Prompt:</div>
-                        <pre class="prompt-pre"><?= e($t['user_prompt']) ?></pre>
-                    </div>
-                </div>
-            <?php endforeach; ?>
-        <?php endif; ?>
-    </div>
-<?php endforeach; ?>
-
-<!-- Modal: Create / Edit template -->
-<div class="modal-overlay" id="promptModal" style="display:none;">
-    <div class="modal-box" style="max-width:720px;">
-        <h3 id="promptModalTitle">Tạo Prompt Template</h3>
-        <form data-ajax method="POST" action="<?= url('/prompts/save') ?>" id="promptForm">
-            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-            <input type="hidden" name="id" id="pf_id">
-
-            <div class="grid-2 compact-grid mb-12">
-                <div class="form-group">
-                    <label class="form-label">Loại prompt *</label>
-                    <select class="form-control" name="template_key" id="pf_key" required>
-                        <?php foreach ($templateKeys as $key => $desc): ?>
-                            <option value="<?= e($key) ?>"><?= $keyLabels[$key][0] ?? $key ?> — <?= e($desc) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Tên hiển thị *</label>
-                    <input class="form-control" name="template_name" id="pf_name" required placeholder="VD: Phong cách Review Chuyên Gia">
-                </div>
-            </div>
-
-            <div class="form-group mb-12">
-                <label class="form-label">System Prompt <span class="sub">(role=system, chỉ dùng cho sinh bài viết text)</span></label>
-                <textarea class="form-control" name="system_prompt" id="pf_system" rows="3" placeholder="VD: Ban la copywriter affiliate..."></textarea>
-            </div>
-
-            <div class="form-group mb-12">
-                <label class="form-label">User Prompt * <span class="sub">(nội dung chính, hỗ trợ {{placeholder}})</span></label>
-                <textarea class="form-control" name="user_prompt" id="pf_user" rows="12" required placeholder="Dùng {{product_name}}, {{price}}, {{platform}}, {{affiliate_url}}..."></textarea>
-            </div>
-
-            <div class="grid-2 compact-grid mb-12">
-                <div class="form-group">
-                    <label class="form-label">Trạng thái</label>
-                    <select class="form-control" name="is_active" id="pf_active">
-                        <option value="1">Kích hoạt (dùng ngay)</option>
-                        <option value="0">Tắt (lưu nháp)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Thứ tự ưu tiên</label>
-                    <input class="form-control" type="number" name="sort_order" id="pf_sort" value="0" min="0">
-                </div>
-            </div>
-
-            <div class="btn-group">
-                <button type="submit" class="btn btn-primary">💾 Lưu template</button>
-                <button type="button" class="btn btn-outline" onclick="previewCurrentForm()">👁️ Preview</button>
-                <button type="button" class="btn btn-outline" onclick="closePromptModal()">Đóng</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Modal: Preview -->
-<div class="modal-overlay" id="previewModal" style="display:none;">
-    <div class="modal-box" style="max-width:700px;">
-        <h3>👁️ Preview Prompt</h3>
-        <p class="sub mb-8">Kết quả sau khi thay thế placeholder bằng dữ liệu sản phẩm mẫu.</p>
-        <pre class="prompt-pre" id="previewResult" style="max-height:450px;overflow-y:auto;white-space:pre-wrap;"></pre>
-        <button type="button" class="btn btn-outline mt-16" onclick="document.getElementById('previewModal').style.display='none'">Đóng</button>
-    </div>
-</div>
-
-<style>
-.prompt-card{border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;background:var(--bg-card);transition:border-color .2s}
-.prompt-active{border-left:3px solid var(--accent)}
-.prompt-inactive{opacity:.7}
-.prompt-card-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px}
-.prompt-section{margin-top:8px}
-.prompt-label{font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
-.prompt-pre{background:var(--bg-hover);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:12.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;color:var(--text-secondary);font-family:'JetBrains Mono',monospace}
-.badge-success{background:var(--success);color:#fff;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}
-.badge-muted{background:var(--bg-hover);color:var(--text-muted);padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}
-.mb-12{margin-bottom:12px}
-.mb-16{margin-bottom:16px}
-.mb-8{margin-bottom:8px}
-#promptForm textarea{font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.5}
-</style>
-
 <script>
-const TEMPLATES_DATA = <?= json_encode($templates, JSON_UNESCAPED_UNICODE) ?>;
-
-function openCreateModal(key) {
-    document.getElementById('promptModalTitle').textContent = 'Tạo Prompt Template';
-    document.getElementById('pf_id').value = '';
-    document.getElementById('pf_key').value = key || 'content_text';
-    document.getElementById('pf_name').value = '';
-    document.getElementById('pf_system').value = '';
-    document.getElementById('pf_user').value = '';
-    document.getElementById('pf_active').value = '1';
-    document.getElementById('pf_sort').value = '0';
-    document.getElementById('promptModal').style.display = 'flex';
+function switchTab(platform) {
+    document.querySelectorAll('.prompts-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.platform === platform);
+    });
+    document.querySelectorAll('.platform-section').forEach(s => {
+        s.classList.toggle('active', s.id === 'section-' + platform);
+    });
 }
 
-function editTemplate(id) {
-    const t = TEMPLATES_DATA.find(x => +x.id === id);
-    if (!t) return;
-    document.getElementById('promptModalTitle').textContent = 'Sửa Template #' + id;
-    document.getElementById('pf_id').value = id;
-    document.getElementById('pf_key').value = t.template_key;
-    document.getElementById('pf_name').value = t.template_name;
-    document.getElementById('pf_system').value = t.system_prompt || '';
-    document.getElementById('pf_user').value = t.user_prompt || '';
-    document.getElementById('pf_active').value = t.is_active ? '1' : '0';
-    document.getElementById('pf_sort').value = t.sort_order || 0;
-    document.getElementById('promptModal').style.display = 'flex';
-}
-
-function closePromptModal() {
-    document.getElementById('promptModal').style.display = 'none';
-}
-
-function activateTemplate(id) {
-    if (!confirm('Kích hoạt template #' + id + '? Các template cùng loại sẽ bị tắt.')) return;
-    const fd = new FormData();
-    fd.append('id', id);
-    fd.append('csrf_token', document.querySelector('input[name="csrf_token"]')?.value || '');
-    fetch(BASE_URL + '/prompts/activate', {method: 'POST', body: fd})
-        .then(r => r.json())
-        .then(res => {
-            if (res.success) { toastr.success(res.message); location.reload(); }
-            else toastr.error(res.message);
-        });
-}
-
-function deleteTemplate(id, name) {
-    if (!confirm('Xóa template "' + name + '"? Không thể hoàn tác.')) return;
-    const fd = new FormData();
-    fd.append('id', id);
-    fd.append('csrf_token', document.querySelector('input[name="csrf_token"]')?.value || '');
-    fetch(BASE_URL + '/prompts/delete', {method: 'POST', body: fd})
-        .then(r => r.json())
-        .then(res => {
-            if (res.success) { toastr.success(res.message); location.reload(); }
-            else toastr.error(res.message);
-        });
-}
-
-function previewTemplate(id) {
-    const t = TEMPLATES_DATA.find(x => +x.id === id);
-    if (!t) return;
-    doPreview(t.user_prompt || '');
-}
-
-function previewCurrentForm() {
-    const text = document.getElementById('pf_user').value;
-    if (!text.trim()) { toastr.warning('Nhập nội dung User Prompt trước.'); return; }
-    doPreview(text);
-}
-
-function doPreview(promptText) {
-    const fd = new FormData();
-    fd.append('user_prompt', promptText);
-    fd.append('csrf_token', document.querySelector('input[name="csrf_token"]')?.value || '');
-    fetch(BASE_URL + '/prompts/preview', {method: 'POST', body: fd})
+function savePrompt(form, key) {
+    const fd = new FormData(form);
+    fetch(form.action, {method: 'POST', body: fd})
         .then(r => r.json())
         .then(res => {
             if (res.success) {
-                document.getElementById('previewResult').textContent = res.data?.rendered || '(trống)';
-                document.getElementById('previewModal').style.display = 'flex';
+                const saved = document.getElementById('saved-' + key);
+                if (saved) {
+                    saved.style.display = 'inline';
+                    setTimeout(() => saved.style.display = 'none', 2000);
+                }
+                toastr.success('Đã lưu!');
             } else {
-                toastr.error(res.message);
+                toastr.error(res.message || 'Lỗi khi lưu');
             }
         });
 }
 
-// Close modals on overlay click
-document.querySelectorAll('.modal-overlay').forEach(el => {
-    el.addEventListener('click', function(e) {
-        if (e.target === this) this.style.display = 'none';
-    });
+// Ctrl+S to save active section
+document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        const form = document.querySelector('.platform-section.active form');
+        if (form) savePrompt(form, document.querySelector('.prompts-tab.active').dataset.platform + '_content');
+    }
 });
 </script>

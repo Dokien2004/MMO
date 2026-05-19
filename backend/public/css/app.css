@@ -169,13 +169,15 @@ a:hover { color: var(--accent-light); }
     box-sizing: border-box;
 }
 
-.posts-expanded .nav-item-sub {
+.posts-expanded .nav-item-sub-posts,
+.contents-expanded .nav-item-sub-contents {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-.posts-expanded .nav-item-sub:hover {
+.posts-expanded .nav-item-sub-posts:hover,
+.contents-expanded .nav-item-sub-contents:hover {
     color: var(--accent);
 }
 

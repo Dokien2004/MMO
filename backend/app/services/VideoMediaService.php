@@ -29,7 +29,7 @@ final class VideoMediaService
             'kling' => $this->generateKlingVideo($contentId, $prompt),
             default => $this->generateLocalPromoVideo($contentId, $content),
         };
-        $updated = $this->contentService->attachMedia($contentId, 'video', $relativeUrl, $prompt, 'ready');
+        $updated = $this->contentService->attachVideo($contentId, $relativeUrl, $prompt, 'ready');
 
         $this->taskLogService->create('generate_content_video', 'success', [
             'content_id' => $contentId,
@@ -42,7 +42,7 @@ final class VideoMediaService
         return $updated;
     }
 
-    public function generateForPendingContents(int $limit = 5): array
+    public function generateForPendingContents(int $limit = 5, string $platform = 'general'): array
     {
         $limit = max(1, min(20, $limit));
         $contents = $this->contentService->allContents();
@@ -392,7 +392,9 @@ final class VideoMediaService
     private function buildVideoPrompt(array $content, array $product = []): string
     {
         $promptService = new PromptTemplateService();
-        $rendered = $promptService->renderForProduct('video', $product, $content);
+        $platform = (string)($content['platform'] ?? $content['channel_type'] ?? 'general');
+        $platformArg = $platform !== 'general' ? $platform : null;
+        $rendered = $promptService->renderForProduct('video', $product, $content, $platformArg);
         if ($rendered !== null) {
             return $rendered;
         }

@@ -9,7 +9,7 @@ $approvedUnscheduled = array_values(array_filter($contents ?? [], static functio
 
 // Filter only tiktok posts
 $tiktokPosts = array_filter($posts ?? [], static fn($p) => ($p['channel'] ?? '') === 'tiktok');
-$videoUnscheduled = array_filter($approvedUnscheduled, static fn($c) => ($c['media_type'] ?? '') === 'video');
+$videoUnscheduled = array_filter($approvedUnscheduled, static fn($c) => !empty($c['video_url']));
 
 $defaultChannel = 'tiktok';
 $defaultStartLocal = date('Y-m-d\TH:i', time() + 3600);
@@ -71,6 +71,7 @@ $defaultInterval = (int)($automationSettings['publish_interval_minutes'] ?? 15);
         <table class="data-table">
             <thead><tr>
                 <th>Nội dung</th>
+                <th>Media Preview</th>
                 <th>Media</th>
                 <th>Lịch / Kết quả</th>
                 <th>Trạng thái</th>
@@ -90,15 +91,44 @@ $defaultInterval = (int)($automationSettings['publish_interval_minutes'] ?? 15);
                             <div class="post-preview-text"><?= e(mb_substr((string)($content['body'] ?? ''), 0, 120)) ?></div>
                         <?php endif; ?>
                     </td>
-                    <td data-label="Media">
-                        <?php if ($content && !empty($content['media_url'])): ?>
-                            <?php if (($content['media_type'] ?? '') === 'video'): ?>
-                                <video class="media-thumb" src="<?= e((string)$content['media_url']) ?>" controls></video>
-                            <?php elseif (($content['media_type'] ?? '') === 'image'): ?>
-                                <img class="media-thumb" src="<?= e((string)$content['media_url']) ?>" alt="Media">
+                    <td data-label="Media Preview">
+                        <div class="media-gallery" style="gap:4px;flex-direction:column">
+                            <?php if ($hasImage): ?>
+                                <img class="media-thumb clickable-media" src="<?= e((string)$content['image_url']) ?>" alt="" data-type="image" data-url="<?= e((string)$content['image_url']) ?>" style="height:40px;width:40px;object-fit:cover;border-radius:4px;border:1px solid var(--border)">
                             <?php endif; ?>
+                            <?php if ($hasVideo): ?>
+                                <video class="media-thumb clickable-media" src="<?= e((string)$content['video_url']) ?>" data-type="video" data-url="<?= e((string)$content['video_url']) ?>" style="height:40px;width:40px;object-fit:cover;border-radius:4px;border:1px solid var(--accent)" muted></video>
+                            <?php endif; ?>
+                            <?php if (!$hasImage && !$hasVideo): ?>
+                                <span class="text-muted" style="font-size:11px">—</span>
+                            <?php endif; ?>
+                        </div>
+                    </td>
+                    <td data-label="Media">
+                        <?php
+                        $postMediaType = $post['media_type'] ?? 'auto';
+                        $hasImage = $content && !empty($content['image_url']);
+                        $hasVideo = $content && !empty($content['video_url']);
+                        ?>
+                        <?php if ($isScheduled): ?>
+                            <form data-ajax method="POST" action="<?= url('/posts/update-media-type') ?>" style="display:inline-flex;gap:4px;align-items:center">
+                                <input type="hidden" name="post_id" value="<?= (int)$post['id'] ?>">
+                                <select name="media_type" style="padding:3px 6px;border-radius:4px;font-size:11px" onchange="this.form.submit()">
+                                    <option value="auto" <?= $postMediaType === 'auto' ? 'selected' : '' ?>>Auto</option>
+                                    <option value="video" <?= $postMediaType === 'video' ? 'selected' : '' ?> <?= !$hasVideo ? 'disabled' : '' ?>>Video <?= !$hasVideo ? '(❌)' : '' ?></option>
+                                    <option value="image" <?= $postMediaType === 'image' ? 'selected' : '' ?> <?= !$hasImage ? 'disabled' : '' ?>>Ảnh <?= !$hasImage ? '(❌)' : '' ?></option>
+                                </select>
+                            </form>
+                            <div style="margin-top:4px;font-size:10px;color:var(--text-muted)">
+                                <?php if ($hasImage): ?><span>🖼️ IMG</span><?php endif; ?>
+                                <?php if ($hasVideo): ?><span>🎬 VID</span><?php endif; ?>
+                            </div>
                         <?php else: ?>
-                            <span class="text-muted">—</span>
+                            <span class="badge"><?= $postMediaType === 'auto' ? 'Auto' : ucfirst($postMediaType) ?></span>
+                            <div style="font-size:10px;color:var(--text-muted)">
+                                <?php if ($hasImage): ?><span>🖼️</span><?php endif; ?>
+                                <?php if ($hasVideo): ?><span>🎬</span><?php endif; ?>
+                            </div>
                         <?php endif; ?>
                     </td>
                     <td data-label="Lịch / kết quả">

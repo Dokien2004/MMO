@@ -550,7 +550,7 @@ if ($method === 'POST' && preg_match('#^/channels/publish/(\d+)$#', $path, $m)) 
         switch ($channel['channel_type']) {
             case 'facebook_page':
                 $fbPublisher = new FacebookPagePublisher();
-                $result = $fbPublisher->publish($content, [], $channel);
+                $result = $fbPublisher->publish($content, []);
                 break;
             case 'facebook_group':
                 $fbGroupPublisher = new FacebookGroupPublisher();
@@ -636,11 +636,6 @@ $postPermissionMap = [
     '/contents/generate-video-tiktok'    => 'contents.generate',
     '/contents/generate-video-instagram'=> 'contents.generate',
     '/contents/generate-video-threads'   => 'contents.generate',
-    '/contents/regenerate-text-facebook' => 'contents.generate',
-    '/contents/regenerate-text-tiktok'   => 'contents.generate',
-    '/contents/regenerate-text-instagram'=> 'contents.generate',
-    '/contents/regenerate-text-threads'  => 'contents.generate',
-    '/contents/regenerate-text'         => 'contents.generate',
     '/posts/schedule'        => 'posts.schedule',
     '/posts/schedule-all'    => 'posts.schedule',
     '/posts/schedule-selected' => 'posts.schedule',
@@ -888,101 +883,11 @@ if ($method === 'POST') {
                 json_response(true, 'Đã reject content #' . $contentId . '.');
                 break;
 
-            // Platform-specific content routes
-            case '/contents/generate-all-facebook':
-            case '/contents/generate-all-tiktok':
-            case '/contents/generate-all-instagram':
-            case '/contents/generate-all-threads':
-                $platform = substr($path, strlen('/contents/generate-all-'));
-                $defaultProvider = $automationSettings['default_content_provider'] ?? 'gemini';
-                $providerRaw = trim((string)($_POST['provider'] ?? ''));
-                $provider = $providerRaw !== '' ? $providerRaw : $defaultProvider;
-                $limit = max(1, min(20, (int)($_POST['limit'] ?? 5)));
-                $result = $contentService->generateForEligibleProducts($limit, $provider, $platform);
-                json_response(true, 'Da sinh ' . $result['count'] . ' draft content cho ' . strtoupper($platform) . '.');
-                break;
-
-            case '/contents/generate-images-facebook':
-            case '/contents/generate-images-tiktok':
-            case '/contents/generate-images-instagram':
-            case '/contents/generate-images-threads':
-                $platform = substr($path, strlen('/contents/generate-images-'));
-                $limit = max(1, min(20, (int)($_POST['limit'] ?? 5)));
-                $result = $imageMediaService->generateForPendingContents($limit, $platform);
-                json_response(true, 'Da tao ' . (int)$result['count'] . ' anh cho ' . strtoupper($platform) . '.');
-                break;
-
-            case '/contents/generate-videos-facebook':
-            case '/contents/generate-videos-tiktok':
-            case '/contents/generate-videos-instagram':
-            case '/contents/generate-videos-threads':
-                $platform = substr($path, strlen('/contents/generate-videos-'));
-                $limit = max(1, min(20, (int)($_POST['limit'] ?? 5)));
-                $result = $videoMediaService->generateForPendingContents($limit, $platform);
-                json_response(true, 'Da tao ' . (int)$result['count'] . ' video cho ' . strtoupper($platform) . '.');
-                break;
-
-            case '/contents/generate-image-facebook':
-            case '/contents/generate-image-tiktok':
-            case '/contents/generate-image-instagram':
-            case '/contents/generate-image-threads':
-                $contentId = (int)($_POST['content_id'] ?? 0);
-                $updated = $imageMediaService->generateForContent($contentId);
-                json_response(true, 'Da tao anh AI cho content #' . $contentId . '.', ['data' => ['media_url' => $updated['media_url'] ?? '']]);
-                break;
-
-            case '/contents/generate-video-facebook':
-            case '/contents/generate-video-tiktok':
-            case '/contents/generate-video-instagram':
-            case '/contents/generate-video-threads':
-                $contentId = (int)($_POST['content_id'] ?? 0);
-                $updated = $videoMediaService->generateForContent($contentId);
-                json_response(true, 'Da tao video cho content #' . $contentId . '.', ['data' => ['media_url' => $updated['media_url'] ?? '']]);
-                break;
-
-            case '/contents/regenerate-text-facebook':
-                $contentId = (int)($_POST['content_id'] ?? 0);
-                $updated = $contentService->regenerateText($contentId, 'gemini', 'facebook');
-                json_response(true, 'Đã tạo lại content text cho content #' . $contentId . '.', ['data' => $updated]);
-                break;
-            case '/contents/regenerate-text-tiktok':
-                $contentId = (int)($_POST['content_id'] ?? 0);
-                $updated = $contentService->regenerateText($contentId, 'gemini', 'tiktok');
-                json_response(true, 'Đã tạo lại content text cho content #' . $contentId . '.', ['data' => $updated]);
-                break;
-            case '/contents/regenerate-text-instagram':
-                $contentId = (int)($_POST['content_id'] ?? 0);
-                $updated = $contentService->regenerateText($contentId, 'gemini', 'instagram');
-                json_response(true, 'Đã tạo lại content text cho content #' . $contentId . '.', ['data' => $updated]);
-                break;
-            case '/contents/regenerate-text-threads':
-                $contentId = (int)($_POST['content_id'] ?? 0);
-                $updated = $contentService->regenerateText($contentId, 'gemini', 'threads');
-                json_response(true, 'Đã tạo lại content text cho content #' . $contentId . '.', ['data' => $updated]);
-                break;
-            case '/contents/regenerate-text':
-                $contentId = (int)($_POST['content_id'] ?? 0);
-                $platform = trim((string)($_POST['platform'] ?? 'facebook'));
-                $updated = $contentService->regenerateText($contentId, 'gemini', $platform);
-                json_response(true, 'Đã tạo lại content text cho content #' . $contentId . '.', ['data' => $updated]);
-                break;
-
-            case '/contents/approve-facebook':
-            case '/contents/approve-tiktok':
-            case '/contents/approve-instagram':
-            case '/contents/approve-threads':
-                $contentId = (int)($_POST['content_id'] ?? 0);
-                $contentService->approveContent($contentId);
-                json_response(true, 'Da duyet content #' . $contentId . '.');
-                break;
-
-
             case '/posts/schedule':
                 $contentId = (int)($_POST['content_id'] ?? 0);
                 $channel = trim((string)($_POST['channel'] ?? 'fanpage_manual'));
                 $scheduledAt = trim((string)($_POST['scheduled_at'] ?? ''));
-                $mediaType = trim((string)($_POST['media_type'] ?? 'auto'));
-                $postingService->schedulePost($contentId, $channel !== '' ? $channel : 'fanpage_manual', $scheduledAt, null, $mediaType);
+                $postingService->schedulePost($contentId, $channel !== '' ? $channel : 'fanpage_manual', $scheduledAt);
                 json_response(true, 'Đã schedule bài đăng cho content #' . $contentId . '.');
                 break;
 
@@ -991,8 +896,7 @@ if ($method === 'POST') {
                 $limit = max(1, min(20, (int)($_POST['limit'] ?? 5)));
                 $scheduledAt = trim((string)($_POST['scheduled_at'] ?? ''));
                 $intervalMinutes = max(1, min(1440, (int)($_POST['interval_minutes'] ?? 15)));
-                $mediaType = trim((string)($_POST['media_type'] ?? 'auto'));
-                $result = $postingService->scheduleForApprovedContents($limit, $channel !== '' ? $channel : 'fanpage_manual', $scheduledAt, $intervalMinutes, $mediaType);
+                $result = $postingService->scheduleForApprovedContents($limit, $channel !== '' ? $channel : 'fanpage_manual', $scheduledAt, $intervalMinutes);
                 $message = 'Đã tạo lịch đăng cho ' . $result['count'] . ' bài.';
                 if (!empty($result['errors'])) {
                     $message .= ' Có ' . count($result['errors']) . ' lỗi.';
@@ -1008,8 +912,7 @@ if ($method === 'POST') {
                 if (!is_array($contentIds)) {
                     $contentIds = [$contentIds];
                 }
-                $mediaType = trim((string)($_POST['media_type'] ?? 'auto'));
-                $result = $postingService->scheduleSelectedContents($contentIds, $channel !== '' ? $channel : 'fanpage_manual', $scheduledAt, $intervalMinutes, $mediaType);
+                $result = $postingService->scheduleSelectedContents($contentIds, $channel !== '' ? $channel : 'fanpage_manual', $scheduledAt, $intervalMinutes);
                 $message = 'Đã lên lịch ' . (int)$result['count'] . ' bài đã chọn.';
                 if (!empty($result['errors'])) {
                     $message .= ' Có ' . count($result['errors']) . ' lỗi.';
@@ -1041,13 +944,6 @@ if ($method === 'POST') {
                 $resultNote = trim((string)($_POST['result_note'] ?? ''));
                 $postingService->markFailed($postId, $resultNote);
                 json_response(true, 'Đã đánh dấu bài #' . $postId . ' là thất bại.');
-                break;
-
-            case '/posts/update-media-type':
-                $postId = (int)($_POST['post_id'] ?? 0);
-                $mediaType = trim((string)($_POST['media_type'] ?? 'auto'));
-                $postingService->updatePostMediaType($postId, $mediaType);
-                json_response(true, 'Đã cập nhật kiểu media cho bài đăng.');
                 break;
 
             case '/settings/automation':
@@ -1571,38 +1467,6 @@ switch ($path) {
         $dbProducts = $productsStmt->fetchAll(PDO::FETCH_ASSOC);
         $totalPages = max(1, (int)ceil($total / $perPage));
 
-        // Build post status per product: which platforms have content for this product
-        // generated_contents.product_id references user_selected_products.id (not source_product_id)
-        $productIds = array_column($dbProducts, 'id'); // use primary key id
-        $sourceProductIds = array_column($dbProducts, 'source_product_id'); // map id => source_product_id
-        $idToSourceId = array_combine($productIds, $sourceProductIds);
-        $postStatusMap = [];
-        if (!empty($productIds)) {
-            $placeholders = implode(',', array_fill(0, count($productIds), '?'));
-            $postStmt = $pdo->prepare(
-                "SELECT gc.product_id,
-                        sp.channel,
-                        sp.status AS post_status,
-                        sp.posted_at
-                 FROM generated_contents gc
-                 JOIN scheduled_posts sp ON sp.content_id = gc.id
-                 WHERE gc.product_id IN ({$placeholders})
-                   AND gc.site_id = ?"
-            );
-            $postStmt->execute(array_merge($productIds, [$siteId]));
-            foreach ($postStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                $productId = (int)($row['product_id'] ?? 0);
-                $sp = (string)($idToSourceId[$productId] ?? '');
-                if ($sp === '') continue;
-                if (!isset($postStatusMap[$sp])) $postStatusMap[$sp] = [];
-                $postStatusMap[$sp][] = [
-                    'channel' => $row['channel'] ?? '',
-                    'status'  => $row['post_status'] ?? '',
-                    'posted_at' => $row['posted_at'] ?? '',
-                ];
-            }
-        }
-
         $summaryStmt = $pdo->prepare(
             'SELECT
                 COUNT(*) AS total,
@@ -1625,7 +1489,6 @@ switch ($path) {
             'pageJs'         => ['/js/modules/products.js'],
             'productSummary' => $productSummary,
             'products'       => $dbProducts,
-            'postStatusMap'  => $postStatusMap,
             'pagination'     => ['page' => $page, 'perPage' => $perPage, 'total' => $total, 'totalPages' => $totalPages],
         ]);
         break;
@@ -1678,27 +1541,6 @@ switch ($path) {
             'contentSummary' => $contentService->summary(),
             'contents'    => $contentService->allContents(),
             'products'    => $userSelectedProductService->all(),
-            'automationSettings' => $automationSettings,
-        ]);
-        break;
-
-    case '/posts':
-        $automationSettings = $automationSettingsService->get();
-        $contents = $contentService->allContents();
-        $posts = $postingService->allPosts();
-        $postContents = [];
-        foreach ($contents as $content) {
-            $postContents[(int)$content['id']] = $content;
-        }
-        render('posts/list', [
-            'pageTitle'    => 'Dashboard Đăng bài',
-            'currentPage'  => 'posts',
-            'postSummary'  => $postingService->summary(),
-            'posts'        => $posts,
-            'postContents' => $postContents,
-            'contents'     => $contents,
-            'fanpageApiReady' => $postingService->fanpageApiAvailable(),
-            'integrationStatus' => $automationSettingsService->integrationStatus(),
             'automationSettings' => $automationSettings,
         ]);
         break;
@@ -1840,65 +1682,6 @@ switch ($path) {
             'currentPage' => 'server_info',
             'serverInfo'  => $serverInfo->get(),
         ]);
-        break;
-
-    case '/ai-assistant':
-        requirePermission('contents.view');
-        $automationSettings = $automationSettingsService->get();
-        render('ai-assistant/index', [
-            'pageTitle'       => '🤖 Trợ lý AI',
-            'currentPage'     => 'ai_assistant',
-            'integrationStatus' => $automationSettingsService->integrationStatus(),
-        ]);
-        break;
-
-    case '/ai-assistant/chat':
-        requirePermission('contents.view');
-        header('Content-Type: application/json');
-        $message = trim((string)($_POST['message'] ?? ''));
-        if ($message === '') {
-            echo json_encode(['error' => 'Message is required']);
-            break;
-        }
-        $context = [];
-        if (!empty($_POST['product_id'])) {
-            $pdo = db_pdo();
-            $stmt = $pdo->prepare('SELECT * FROM user_selected_products WHERE id = ? AND site_id = ?');
-            $stmt->execute([(int)$_POST['product_id'], (int)currentSiteId()]);
-            $product = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-            if (!empty($product)) {
-                $context['product'] = $product;
-            }
-        }
-        if (!empty($_POST['platform'])) {
-            $context['platform'] = $_POST['platform'];
-        }
-        $assistant = new AiAssistantService();
-        $reply = $assistant->chat($message, $context);
-        echo json_encode(['reply' => $reply]);
-        break;
-
-    case '/ai-assistant/generate':
-        requirePermission('contents.view');
-        header('Content-Type: application/json');
-        $type = trim((string)($_POST['type'] ?? 'copywriting'));
-        $productId = (int)($_POST['product_id'] ?? 0);
-        $platform = trim((string)($_POST['platform'] ?? 'facebook'));
-        if ($productId <= 0) {
-            echo json_encode(['error' => 'product_id is required']);
-            break;
-        }
-        $pdo = db_pdo();
-        $stmt = $pdo->prepare('SELECT * FROM user_selected_products WHERE id = ? AND site_id = ?');
-        $stmt->execute([$productId, (int)currentSiteId()]);
-        $product = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-        if (empty($product)) {
-            echo json_encode(['error' => 'Product not found']);
-            break;
-        }
-        $assistant = new AiAssistantService();
-        $result = $assistant->generateContent($type, $product, $platform);
-        echo json_encode($result);
         break;
 
     case '/settings':

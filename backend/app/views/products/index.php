@@ -75,7 +75,6 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
         <a class="btn btn-success" href="<?= url('/contents') ?>">✍️ Tạo Content</a>
     </div>
 
-<<<<<<< HEAD
     <div class="two-col-section">
         <div class="card radar-card-grid" style="margin-bottom:0">
             <div class="card-title" style="font-size:14px;margin-bottom:12px">🎯 Cần tạo link — tiềm năng cao</div>
@@ -123,9 +122,6 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
             <?php endif; ?>
         </div>
     </div>
-=======
-
->>>>>>> 9ec4823acff1517e52485279bce0434d00507fc9
 
     <div class="publish-mode-grid" style="margin-bottom:20px">
         <div class="card publish-mode-card ready" style="padding:16px">
@@ -216,6 +212,7 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
                             <th style="width:90px">Giá</th>
                             <th style="width:80px">Đã bán</th>
                             <th style="width:80px">Link Aff</th>
+                            <th style="width:120px">Đã đăng</th>
                             <th style="width:90px">Thao tác</th>
                         </tr>
                     </thead>
@@ -239,6 +236,27 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
                                     <span style="color:var(--text-muted)">—</span>
                                 <?php endif; ?>
                             </td>
+                            <td data-label="Đã đăng">
+                                <?php
+                                $spId = (string)($product['source_product_id'] ?? '');
+                                $postInfo = $postStatusMap[$spId] ?? [];
+                                $channelIcons = ['fanpage_api' => '📘', 'tiktok' => '🎵', 'instagram' => '📷', 'threads' => '💬'];
+                                if (empty($postInfo)): ?>
+                                    <span class="sub text-xs">—</span>
+                                <?php else: ?>
+                                    <div style="display:flex;gap:4px;flex-wrap:wrap">
+                                        <?php foreach ($postInfo as $p): ?>
+                                            <?php
+                                            $ch = $p['channel'] ?? '';
+                                            $st = $p['status'] ?? '';
+                                            $icon = $channelIcons[$ch] ?? '📡';
+                                            $color = $st === 'published' ? '#22c55e' : ($st === 'failed' ? '#ef4444' : '#f59e0b');
+                                            ?>
+                                            <span style="font-size:12px;color:<?= $color ?>" title="<?= ucfirst($ch) . ' — ' . $st ?> (<?= $p['posted_at'] ?? 'chưa đăng' ?>)"><?= $icon ?></span>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <button
                                     type="button"
@@ -253,10 +271,10 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
                                     style="font-size:11px;padding:4px 8px"
                                 >
                                     <?php if (empty($product['affiliate_url'])): ?>
-                                        + Thêm link
-                                    <?php else: ?>
-                                        <i class="fas fa-edit"></i> Sửa
-                                    <?php endif; ?>
+                                    + Link
+                                <?php else: ?>
+                                    <i class="fas fa-edit"></i> Sửa
+                                <?php endif; ?>
                                 </button>
                             </td>
                         </tr>
@@ -318,7 +336,7 @@ $topRadarEligible = array_slice($radarEligible, 0, 5);
                     <textarea class="form-control" name="notes" id="edit_notes" rows="2"></textarea>
                 </div>
                 <div class="modal-actions">
-                    <button type="submit" class="btn btn-accent" style="flex:1;">Lưu vào My Products</button>
+                    <button type="submit" class="btn btn-accent" style="flex:1;">Lưu link affiliate</button>
                     <button type="button" class="btn btn-cancel" data-close-select-modal>Hủy</button>
                 </div>
             </form>

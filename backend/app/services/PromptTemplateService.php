@@ -95,23 +95,52 @@ final class PromptTemplateService
     /**
      * Render prompt template với dữ liệu sản phẩm/content.
      * Trả về null nếu chưa có template trong DB (để fallback về hardcode).
+     * @param string $templateKey Loại template (content_text, image, ...)
+     * @param array $product Dữ liệu sản phẩm
+     * @param array $contentData Dữ liệu content (title, body, ...)
+     * @param string|null $socialPlatform Mạng xã hội đích: facebook|tiktok|instagram|threads (khác với source_platform)
      */
-    public function renderForProduct(string $templateKey, array $product, array $contentData = []): ?string
+    public function renderForProduct(string $templateKey, array $product, array $contentData = [], ?string $socialPlatform = null): ?string
     {
+        // Ưu tiên platform-specific template
+        if ($socialPlatform !== null && $socialPlatform !== 'general') {
+            $platformKey = $templateKey . '_' . $socialPlatform;
+            $template = $this->getActive($platformKey);
+            if ($template !== null) {
+                return $this->render($template['user_prompt'] ?? '', $product, $contentData, $socialPlatform);
+            }
+        }
+
+        // Fallback về base template
         $template = $this->getActive($templateKey);
         if ($template === null) {
             return null;
         }
 
-        return $this->render($template['user_prompt'] ?? '', $product, $contentData);
+        return $this->render($template['user_prompt'] ?? '', $product, $contentData, $socialPlatform);
     }
 
     /**
      * Lấy system prompt từ template.
      * Trả về null nếu chưa có template trong DB.
+     * @param string $templateKey Base template key (e.g., 'content_text')
+     * @param string|null $platform Platform cụ thể (facebook/tiktok/instagram/threads)
      */
-    public function systemPromptFor(string $templateKey): ?string
+    public function systemPromptFor(string $templateKey, ?string $platform = null): ?string
     {
+        // Ưu tiên platform-specific template
+        if ($platform !== null && $platform !== 'general') {
+            $platformKey = $templateKey . '_' . $platform;
+            $template = $this->getActive($platformKey);
+            if ($template !== null) {
+                $systemPrompt = trim((string)($template['system_prompt'] ?? ''));
+                if ($systemPrompt !== '') {
+                    return $systemPrompt;
+                }
+            }
+        }
+
+        // Fallback về base template
         $template = $this->getActive($templateKey);
         if ($template === null) {
             return null;
@@ -123,8 +152,9 @@ final class PromptTemplateService
 
     /**
      * Render 1 chuỗi prompt text bằng cách thay thế {{placeholder}} bằng giá trị thực.
+     * @param string|null $socialPlatform Mạng xã hội đích (facebook/tiktok/instagram/threads)
      */
-    public function render(string $promptText, array $product, array $contentData = []): string
+    public function render(string $promptText, array $product, array $contentData = [], ?string $socialPlatform = null): string
     {
         $price = number_format((float)($product['price'] ?? 0), 0, ',', '.');
         $soldCount = (int)($product['sold_count'] ?? 0);
@@ -141,10 +171,14 @@ final class PromptTemplateService
             ? 'Benefits to visualize: ' . mb_substr(preg_replace('/\s+/u', ' ', $body) ?? '', 0, 350)
             : '';
 
+        // Social platform đích override {{platform}} để prompt biết đang viết cho mạng xã hội nào
+        // Nếu không truyền thì dùng source_platform (shopee/tiki/lazada)
+        $platformValue = $socialPlatform ?? (string)($product['source_platform'] ?? '');
+
         $replacements = [
             '{{product_name}}'     => (string)($product['product_name'] ?? ''),
             '{{price}}'            => $price,
-            '{{platform}}'         => (string)($product['source_platform'] ?? ''),
+            '{{platform}}'         => $platformValue,
             '{{affiliate_url}}'    => (string)($product['affiliate_url'] ?? ''),
             '{{sold_count}}'       => number_format($soldCount),
             '{{notes}}'            => (string)($product['notes'] ?? ''),
@@ -171,8 +205,8 @@ final class PromptTemplateService
     public function create(array $data): int
     {
         $stmt = $this->pdo->prepare(
-            'INSERT INTO prompt_templates (site_id, template_key, template_name, system_prompt, user_prompt, is_active, sort_order)
-             VALUES (:site_id, :key, :name, :system, :user, :active, :sort)'
+            'INSERT INTO prompt_templates (site_id, template_key, template_name, system_prompt, user_prompt, platform, is_active, sort_order)
+             VALUES (:site_id, :key, :name, :system, :user, :platform, :active, :sort)'
         );
         $stmt->execute([
             ':site_id' => $this->currentSiteId(),
@@ -180,6 +214,7 @@ final class PromptTemplateService
             ':name'    => trim((string)($data['template_name'] ?? '')),
             ':system'  => trim((string)($data['system_prompt'] ?? '')),
             ':user'    => trim((string)($data['user_prompt'] ?? '')),
+            ':platform'=> trim((string)($data['platform'] ?? 'general')),
             ':active'  => (int)($data['is_active'] ?? 1),
             ':sort'    => (int)($data['sort_order'] ?? 0),
         ]);
@@ -198,13 +233,14 @@ final class PromptTemplateService
         $stmt = $this->pdo->prepare(
             'UPDATE prompt_templates
              SET template_name = :name, system_prompt = :system, user_prompt = :user,
-                 is_active = :active, sort_order = :sort
+                 platform = :platform, is_active = :active, sort_order = :sort
              WHERE id = :id AND site_id = :site_id'
         );
         $result = $stmt->execute([
             ':name'    => trim((string)($data['template_name'] ?? $existing['template_name'])),
             ':system'  => trim((string)($data['system_prompt'] ?? $existing['system_prompt'])),
             ':user'    => trim((string)($data['user_prompt'] ?? $existing['user_prompt'])),
+            ':platform'=> trim((string)($data['platform'] ?? $existing['platform'])),
             ':active'  => (int)($data['is_active'] ?? $existing['is_active']),
             ':sort'    => (int)($data['sort_order'] ?? $existing['sort_order']),
             ':id'      => $id,
